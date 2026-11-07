@@ -1,0 +1,15 @@
+# Entorno reproducible para los 3 computadores y el cluster.
+#   conda env create -f environment.yml      (o: mamba env create -f environment.yml)
+#   conda activate tarea3
+# En Windows, conda-forge instala mpi4py sobre MS-MPI (msmpi). Ver README.md.
+name: tarea3
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy
+  - mpi4py
+  - matplotlib
+  - pandas
+  - threadpoolctl

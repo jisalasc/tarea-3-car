@@ -1,0 +1,10 @@
+# Fuerza fin de línea LF en todo el texto. Un script SLURM con CRLF (Windows)
+# falla en el cluster con "bad interpreter" o errores raros de sbatch.
+* text=auto eol=lf
+*.sh    text eol=lf
+*.slurm text eol=lf
+*.py    text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.pdf   binary
+*.png   binary

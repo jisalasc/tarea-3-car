@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.conda*/
+*.egg-info/
+
+# Resultados temporales y logs del cluster
+slurm/logs/*
+!slurm/logs/.gitkeep
+*.npy
+*.npz
+
+# Entregables generados (el zip final se arma con scripts/make_zip.sh)
+*.zip
+
+# Sistema / editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# NUNCA subir claves privadas (las públicas .pub sí pueden ir)
+id_*
+!*.pub
+*.pem
+*.key
