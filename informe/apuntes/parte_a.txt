@@ -1,0 +1,70 @@
+PARTE (a) — barrido de b en serial  [10 pts]   (apuntes, NO redacción)
+=====================================================================
+
+QUÉ SE HIZO
+- Script: scripts/parte_a.py, que llama a lu_blocked() de src/lu_serial.py (archivo del curso, sin tocar).
+- N = 2^12 = 4096, UN thread de BLAS (OMP/OPENBLAS/MKL_NUM_THREADS=1 fijados antes de importar numpy;
+  threadpoolctl confirma num_threads=1), b en {4096, 2048, 1024, 512, 256, 128, 64} = {N/1 ... N/64}.
+- 3 repeticiones por b, loop externo de repeticiones (rep0: todos los b, rep1: todos los b, ...) para que
+  el calentamiento no castigue siempre al mismo b. Se reporta la MEDIANA; min-max como banda.
+- Se cronometra sólo lu_blocked (la generación de A y la copia quedan fuera).
+- Correctitud: residuo ||A - LU||_F / ||A||_F ~ 2e-16 a 3e-16 en todos los b (precisión de máquina) y el
+  checksum de LU es idéntico para todos los b (1.677723e+07) => todos los b dan la misma factorización.
+- Máquina: macOS-26.6.2-arm64-arm-64bit | cores lógicos=10 | python 3.11.18 numpy 2.4.6 scipy 1.17.1 | BLAS=openblas 0.3.34 threads=1
+  (MacBook Pro, Apple M5, 10 cores; cerrar apps pesadas al medir).
+- Datos crudos: results/parte_a_mac_jose.csv, entorno: results/parte_a_mac_jose_meta.json
+- Figura: informe/figuras/parte_a_mac_jose.png   (regenerar: python scripts/plot_parte_a.py --tag mac_jose)
+
+RESULTADOS (mediana de 3)
+| b    | N/b | mediana [s] | min   | max   | GFLOP/s | vs. mejor |
+| 4096 |  1  | 0.882 | 0.874 | 0.912 | 51.9 | 1.04x |
+| 2048 |  2  | 0.864 | 0.857 | 0.876 | 53.0 | 1.02x |
+| 1024 |  4  | 0.845 | 0.841 | 0.845 | 54.2 | 1.00x |  <- mejor
+|  512 |  8  | 0.853 | 0.851 | 0.856 | 53.7 | 1.01x |
+|  256 | 16  | 0.895 | 0.895 | 0.898 | 51.2 | 1.06x |
+|  128 | 32  | 0.984 | 0.980 | 1.021 | 46.5 | 1.17x |
+|   64 | 64  | 1.155 | 1.152 | 1.173 | 39.7 | 1.37x |
+GFLOP/s = (2/3 N^3) / t / 1e9.
+
+b ELEGIDO: b = 1024 (N/4). Pero OJO: 512..2048 están dentro de un 2% (la banda min-max de cada uno
+no se solapa con la de 1024, así que la diferencia es real pero chica). Lo que sí es claro: b <= 256
+empeora, y b = 64 cuesta 37% más.
+
+POR QUÉ (argumentos para la explicación; los flops totales NO dependen de b)
+- Flops totales ~ (2/3) N^3 para cualquier b. Lo que cambia con b es QUÉ rutina los hace y con qué
+  eficiencia (todas son BLAS/LAPACK de OpenBLAS, pero no rinden igual):
+    * lu_factor (getrf) sobre nb bloques de b x b:  nb * (2/3) b^3 = (2/3) N b^2  -> fracción (b/N)^2
+    * solve_triangular (trsm) paneles:  ~ N^2 b                               -> fracción 1.5 b/N
+    * matmul (gemm) actualización: el resto                                     -> fracción 1 - (b/N)^2 - 1.5 b/N
+  Ejemplos:  b=64:   getrf 0.02%, trsm 2.3%, gemm 97.6%
+             b=512:  getrf 1.6%,  trsm 19%,  gemm 80%
+             b=1024: getrf 6%,    trsm 37%,  gemm 56%
+             b=2048: getrf 25%,   trsm 75%,  gemm 0% (nb=2: una sola actualización de 2048x2048 con k=2048)
+             b=4096: getrf 100%  (= llamar a LAPACK getrf con toda la matriz)
+- b chico (64, 128): casi todo es gemm, PERO cada actualización es un "rank-b update" A[e:,e:] -= L @ U
+  con dimensión interna k = b. Intensidad aritmética ~ 2*m*n*b flops / (lectura+escritura de m*n
+  elementos) = O(b) flops por elemento => con b=64 la actualización está limitada por memoria, no por
+  cómputo. Además hay nb = 64 pasos: 64 veces se crea la matriz temporal (L @ U) de hasta (N-e)^2
+  (hasta 128 MB), se recorre A[e:,e:] completa, y se hacen las copias .T de solve_triangular. El
+  overhead de Python por paso es despreciable (64 iteraciones), lo que pesa es el tráfico de memoria.
+- b grande (2048, 4096): más trabajo cae en getrf y trsm. getrf de OpenBLAS está internamente
+  bloqueado/recursivo (usa su propio gemm adentro) así que NO colapsa, por eso b=N sólo es 4% peor
+  que el mejor. Pero getrf/trsm sobre bloques grandes rinden algo menos que gemm puro, y con b=N el
+  "bloqueo" es el de LAPACK, no el nuestro.
+- b intermedio (512-1024): bloques lo bastante grandes para que gemm corra cerca del peak (~54 GFLOP/s
+  en 1 core) y lo bastante chicos para que getrf/trsm sean una fracción menor. Mínimo plano.
+- Tamaño en memoria: bloque de 1024x1024 float64 = 8 MB; 512x512 = 2 MB; 64x64 = 32 KB. El M5 tiene
+  cachés L2 grandes (varios MB por cluster de cores), lo que ayuda a que bloques de 512-1024 sigan
+  siendo eficientes. (No afirmar tamaños exactos de caché sin fuente.)
+
+OJO PARA LA PARTE (c)/(d) (no va en (a), pero conviene tenerlo en mente)
+- En el cluster con N=8192 y grid 2x2 el mejor b puede cambiar: con b grande hay pocos bloques
+  (N/b por lado) y el reparto bloque-cíclico queda desbalanceado (con b=1024 y N=8192 son 8x8 bloques,
+  sólo 4x4 por proceso en 2x2; en 4x4 queda 2x2 por proceso). Además cada paso tiene Bcast de O(b^2) y
+  de paneles O(N b): b chico => más mensajes (latencia), b grande => menos paralelismo y más espera.
+- El valor de (a) (1024) es el candidato "de cómputo local"; (c) decide el del cluster.
+
+QUÉ MOSTRAR EN EL INFORME
+- La tabla (mediana, min, max, GFLOP/s) y la figura parte_a_mac_jose.png.
+- Decir: máquina, 1 thread verificado, 3 repeticiones, mediana, cronómetro sólo sobre lu_blocked,
+  residuo ~1e-16, b elegido = 1024 y que 512-2048 son equivalentes en la práctica.

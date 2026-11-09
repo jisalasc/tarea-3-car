@@ -53,7 +53,7 @@ class BlockCyclic:
     def first_local_col_after(self, k):
         return len(range(self.mycol, k + 1, self.pc))
 
-    # --- índices globales de filas/columnas que guardo (para matgen) -------
+    # --- índices globales de filas/columnas que guardo (para matrix_entries) -------
     def global_row_indices(self):
         b = self.b
         return np.concatenate([np.arange(I * b, (I + 1) * b) for I in self.block_rows]) \

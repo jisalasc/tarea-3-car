@@ -13,7 +13,8 @@ date: "16 de noviembre de 2026"
 - Cluster kraken: nodos `ventress`/`yodaxico`, límites (8 CPUs, 4 GB, 15 min), versiones.
 
 ## (a) Barrido de b en serial (N = 4096, 1 thread) — 10 pts
-Tabla/gráfico tiempo vs b (mediana de R repeticiones). Valor de b elegido y por qué.
+<!-- apuntes: informe/apuntes/parte_a.txt. Datos: results/parte_a_mac_jose.csv -->
+Mostrar: tabla (b, mediana, min, max, GFLOP/s) + figura `informe/figuras/parte_a_mac_jose.png`. Máquina y condiciones. b elegido = 1024 (512–2048 equivalentes).
 
 ## (b) Implementación distribuida — 20 pts
 - Distribución bloque-cíclica y layout local (sub-arreglo contiguo ⇒ un matmul por paso).

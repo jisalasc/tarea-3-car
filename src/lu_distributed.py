@@ -45,8 +45,8 @@ from mpi4py import MPI  # noqa: E402
 from scipy.linalg import lu_factor, solve_triangular  # noqa: E402,F401
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import matgen  # noqa: E402
 from layout import BlockCyclic  # noqa: E402
+from lu_serial import matrix_entries  # noqa: E402  (archivo del curso: misma matriz que la versión serial)
 
 
 # ----------------------------------------------------------------------------
@@ -149,9 +149,10 @@ def lu_distributed(Aloc, bc, grid, tm):
 # ----------------------------------------------------------------------------
 # Utilidades: construcción local, gather global, verificación, salida
 # ----------------------------------------------------------------------------
-def build_local(bc, seed):
+def build_local(bc):
+    """Bloques locales generados directamente desde los índices globales (sin comunicación)."""
     rows, cols = bc.global_row_indices(), bc.global_col_indices()
-    return matgen.local_rows(rows, cols, bc.N, seed)
+    return matrix_entries(rows, cols, bc.N)
 
 
 def gather_global(Aloc, bc, grid):
@@ -168,14 +169,16 @@ def gather_global(Aloc, bc, grid):
     return G
 
 
-def verify(Aloc, bc, grid, seed, tol=1e-8):
-    """Compara contra lu_serial.lu_blocked con la MISMA matriz y el MISMO b."""
+def verify(Aloc, bc, grid, tol=1e-8):
+    """Compara contra lu_serial.lu_blocked (archivo del curso) con la MISMA matriz y el MISMO b."""
     from lu_serial import lu_blocked, residual
     G = gather_global(Aloc, bc, grid)
     ok = None
     if grid.rank == 0:
-        A0 = matgen.full_matrix(bc.N, seed)
-        LU_ser = lu_blocked(A0.copy(), bc.b)
+        idx = np.arange(bc.N)
+        A0 = matrix_entries(idx, idx, bc.N)
+        LU_ser = A0.copy()
+        lu_blocked(LU_ser, bc.b)
         diff = float(np.max(np.abs(G - LU_ser)) / np.max(np.abs(LU_ser)))
         res = residual(A0, G)
         ok = diff < tol and res < tol
@@ -210,7 +213,6 @@ def main():
     p.add_argument("--pc", type=int, default=None)
     p.add_argument("--threads", type=int, default=None, help="threads de BLAS por proceso (T)")
     p.add_argument("--reps", type=int, default=1)
-    p.add_argument("--seed", type=int, default=0)
     p.add_argument("--verify", action="store_true", help="compara con lu_serial (sólo N chico)")
     p.add_argument("--layout-only", action="store_true", help="imprime la distribución y sale")
     p.add_argument("--out", default=None, help="CSV: una fila por proceso y repetición")
@@ -225,7 +227,7 @@ def main():
     T = int(os.environ.get("OMP_NUM_THREADS", args.threads or -1))
     nodes = int(os.environ.get("SLURM_JOB_NUM_NODES", 1))
     tpn = int(os.environ.get("SLURM_NTASKS_PER_NODE", grid.size))
-    A0 = build_local(bc, args.seed)
+    A0 = build_local(bc)
 
     for rep in range(args.reps):
         Aloc = A0.copy()
@@ -237,7 +239,7 @@ def main():
         t_max = grid.comm.allreduce(t_wall, op=MPI.MAX)
 
         if args.verify and rep == 0:
-            if not verify(Aloc, bc, grid, args.seed):
+            if not verify(Aloc, bc, grid):
                 grid.comm.Abort(1)
 
         row = {

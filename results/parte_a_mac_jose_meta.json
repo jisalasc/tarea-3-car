@@ -1,0 +1,37 @@
+{
+  "host": "MacBook-Pro-de-Jose.local",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "machine": "arm64",
+  "cpu_count_logical": 10,
+  "python": "3.11.18",
+  "numpy": "2.4.6",
+  "scipy": "1.17.1",
+  "blas": [
+    {
+      "user_api": "blas",
+      "internal_api": "openblas",
+      "num_threads": 1,
+      "prefix": "libopenblas",
+      "filepath": "/opt/homebrew/Caskroom/miniforge/base/envs/tarea3/lib/libopenblas.0.dylib",
+      "version": "0.3.34",
+      "threading_layer": "openmp",
+      "architecture": "VORTEX"
+    }
+  ],
+  "env_threads": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1"
+  },
+  "N": 4096,
+  "b_list": [
+    4096,
+    2048,
+    1024,
+    512,
+    256,
+    128,
+    64
+  ],
+  "reps": 3,
+  "ts": "2026-11-09T09:27:24"
+}

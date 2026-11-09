@@ -5,8 +5,8 @@ Entrega: **lunes 16 de noviembre 23:59**. Hoy (sábado 7) queda el repo iniciali
 
 ## Estado actual (lo que ya está)
 - [x] Entorno reproducible (`environment.yml`: numpy, scipy, mpi4py, matplotlib, pandas). Probado en Mac (Open MPI 5).
-- [x] `src/matgen.py`: matriz diagonal dominante **determinista por fila** → serial y distribuido generan la misma A sin comunicación.
-- [x] `src/lu_serial.py`: LU por bloques completo y verificado (residuo ~1e-16, `--check`), CLI con `--N --b --threads --reps --out`.
+- [x] `src/lu_serial.py`: **archivo del curso sin modificar** (copia en `docs/lu_serial_original.py`). Su `matrix_entries(rows, cols, N)` genera cualquier bloque desde índices globales → el distribuido genera sólo sus bloques sin comunicación.
+- [x] `scripts/parte_a.py`: wrapper de la parte (a) (1 thread, repeticiones, CSV + metadata del entorno).
 - [x] `src/layout.py` + `tests/test_layout.py`: distribución bloque-cíclica validada contra las Figuras 1 y 2 del PDF.
 - [x] `src/lu_distributed.py`: grid, comunicadores, construcción local, cronómetros cómputo/comunicación, `--verify`, CSV, `--layout-only`.
       **Falta el núcleo del paso k (TODOs 1–5).**
@@ -18,7 +18,7 @@ Entrega: **lunes 16 de noviembre 23:59**. Hoy (sábado 7) queda el repo iniciali
 ### Persona A — núcleo (José Ignacio, parte b + a)
 1. Implementar los TODOs 1–5 de `lu_distributed()` (`src/lu_distributed.py`). Probar local con `scripts/run_local_mpi.sh 2 2 512 64`, luego 2×3, 1×4, 4×1, 1×1 y b=N (nb=1).
 2. `--verify` debe dar PASS en todos. Probar también `N/b` no múltiplo de pr/pc (p. ej. N=640, b=64, grid 2×3).
-3. Correr parte (a): `scripts/run_parte_a.sh` (1 thread, N=4096, cerrar apps pesadas). Elegir b.
+3. Correr parte (a): `python scripts/parte_a.py --check` (1 thread, N=4096, cerrar apps pesadas). Elegir b.
 4. Escribir en el informe la sección (b): colectiva / comunicador / raíz por paso, y el método de verificación.
 
 ### Persona B — cluster (configurar temprano, es el riesgo mayor)
@@ -43,7 +43,7 @@ Entrega: **lunes 16 de noviembre 23:59**. Hoy (sábado 7) queda el repo iniciali
 | lun 16 | zip + PDF a Canvas (no dejar para la noche; 1 job corriendo a la vez) |
 
 ## Decisiones de diseño (para que los tres hablemos el mismo idioma)
-- **Matriz:** `A[i,j] ~ U(0,1)`, `A[i,i] += N`. Fila i generada con `default_rng([seed, i])`. Dominante por filas y columnas ⇒ `lu_factor` no pivotea (se verifica `piv == arange`).
+- **Matriz:** la del curso: `A[i,j] = sin(1e-3·i·j + 0.3·i + 0.7·j)` fuera de la diagonal, `A[i,i] = N`. Dominante por filas y columnas ⇒ `lu_factor` no pivotea (el `assert` del curso lo verifica). Cada proceso llama `matrix_entries(rows, cols, N)` con sus índices globales.
 - **Layout local:** un solo arreglo 2D `(nlr·b) × (nlc·b)`, bloque local (i,j) = global `(myrow + i·pr, mycol + j·pc)`. En el paso k la parte restante es `Aloc[i_start·b:, j_start·b:]`.
 - **Medición:** `t_comp` = lu_factor + solve_triangular + matmul; `t_comm` = tiempo dentro de los `Bcast` (incluye espera por desbalance; decirlo en el informe). Tiempo del job = máx wall entre procesos tras un `Barrier`.
 - **Verificación:** gather de los bloques a rank 0 y comparación elemento a elemento contra `lu_serial.lu_blocked` con la misma A y el mismo b, más residuo `||A − LU||/||A||`. Sólo para N chico (≤ 2048).
