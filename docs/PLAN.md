@@ -11,20 +11,22 @@ Entrega: **lunes 16 de noviembre 23:59**. Hoy (sábado 7) queda el repo iniciali
 - [x] `src/lu_distributed.py`: **parte (b) implementada y verificada** (`scripts/test_distributed.sh`: 12 grids, diff = 0 vs serial).
 - [x] Parte (a) corrida en el Mac de José: mejor b = 1024 (`results/parte_a_mac_jose.csv`, `informe/apuntes/parte_a.txt`).
 - [x] Scripts SLURM con los campos obligatorios, planificador de jobs y envío respetando la cola.
-- [ ] Nada corrido aún en el cluster. Nadie ha validado todavía `mpirun` multi-nodo en kraken.
+- [x] Cluster validado (9 nov): Miniconda + env `tarea3` instalados en la cuenta del grupo, `srun --mpi=pmix` funciona en 1 y 2 nodos, `--threads-per-core=1` da 8 cores físicos. Ver `slurm/README.md` y `informe/apuntes/cluster.txt`.
+- [x] Parte (c) corrida (job 37838): **b = 512** (`results/cluster/parte_c.csv`, `informe/figuras/parte_c.png`, `informe/apuntes/parte_c.txt`).
 
 ## División propuesta (ajustar entre los tres)
 
-### Persona A — núcleo (José Ignacio, parte b + a)
+### Persona A — núcleo (José Ignacio, partes a, b, c + validación del cluster)
 1. ~~Implementar el núcleo~~ hecho (9 nov). `scripts/test_distributed.sh` pasa en 12 casos.
 2. ~~Parte (a)~~ hecha (9 nov): b = 1024.
-3. Redactar (a) y (b) en el informe a partir de `informe/apuntes/parte_a.txt` y `parte_b.txt`.
-4. Apoyar a B con el cluster y a C con los gráficos de (d)–(f).
+3. ~~Cluster y parte (c)~~ hecho (9 nov): b = 512.
+4. Redactar (a), (b) y (c) en el informe a partir de `informe/apuntes/parte_a.txt`, `parte_b.txt`, `parte_c.txt` y `cluster.txt`.
+5. Apoyar a B con el cluster y a C con los gráficos de (d)–(f).
 
-### Persona B — cluster (configurar temprano, es el riesgo mayor)
-1. Acceso a kraken (`ssh kraken`), Miniconda, `conda env create -f environment.yml`, `git clone` del repo.
-2. **Validar el primer día**: `sbatch` de `--layout-only` con 1 nodo y con 2 nodos (`--nodes=2`). Si `mpirun` del env conda no levanta procesos en el segundo nodo, probar `srun --mpi=pmix` o el MPI del sistema. Documentar en `slurm/README.md`.
-3. Cuando (b) esté listo: `sweep_b.slurm` (parte c) → fijar b del cluster → `plan_jobs.sh` para configs 0–3 (d), 4–5 (e), y parte (f) (grid 2×2, b=4096 y b=512, T=1).
+### Persona B — cluster: partes (d), (e), (f)
+1. Acceso a kraken con sus credenciales. El entorno ya está instalado en la cuenta del grupo (`~/miniconda3`, env `tarea3`, repo en `~/tarea-3-car`): sólo `cd ~/tarea-3-car && git pull`.
+2. ~~Validar multi-nodo~~ hecho. Leer `slurm/README.md` (qué aprendimos: `--comment`, `--mem=4G`, `--threads-per-core=1`, nodos distintos, lanzador `srun --mpi=pmix`).
+3. Con **b = 512**: `slurm/plan_jobs.sh 0 512 > slurm/queue.txt`, luego configs 1, 2, 3 (parte d), 4 y 5 (parte e), y parte (f) (grid 2×2, T=1, b=4096 y b=512, 1 nodo). `slurm/submit_next.sh` respeta la cola. Un job de config 2 tarda ~10 s por repetición; todo (d)+(e)+(f) cabe en una tarde.
 4. Subir los CSV a `results/cluster/` con commits frecuentes. Guardar los `.out` relevantes.
 
 ### Persona C — análisis, modelo de costo e informe
@@ -57,7 +59,7 @@ Entrega: **lunes 16 de noviembre 23:59**. Hoy (sábado 7) queda el repo iniciali
 - `results/` se versiona (son los datos del informe). `slurm/logs/` no.
 
 ## Riesgos
-1. `mpirun` conda + SLURM multi-nodo (configs 4 y 5). Mitigación: validar el día 1 con `--layout-only`.
+1. ~~`mpirun` conda + SLURM multi-nodo~~ resuelto: `srun --mpi=pmix` validado en 2 nodos (9 nov).
 2. Cola compartida (1 job corriendo, 15 min): planificar las corridas; (c) va en un solo job.
 3. Memoria 4 GB/nodo: N=8192 float64 = 512 MB totales; con `--verify` o `gather` en N grande se revienta → verify sólo local.
 4. Windows: mpi4py nativo usa MS-MPI; si da problemas, WSL2 (mismo flujo que Linux/cluster).

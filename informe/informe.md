@@ -27,6 +27,10 @@ Mostrar: tabla (b, mediana, min, max, GFLOP/s) + figura `informe/figuras/parte_a
 ## (c) Barrido de b en el cluster (N = 8192, config 2, T = 2) — 10 pts
 Tabla/gráfico. ¿Sigue siendo el mejor el b de (a)? Por qué sí/no.
 
+- Datos: `results/cluster/parte_c.csv` (job 37838, ventress). Tabla y figura: `python scripts/plot_parte_c.py` → `informe/figuras/parte_c.png`.
+- Apuntes con la tabla y los argumentos: `informe/apuntes/parte_c.txt`. Setup del cluster (hardware, hyperthreading, lanzador): `informe/apuntes/cluster.txt`.
+- Resultado: **b = 512** (2.59 s, 141.6 GFLOP/s); b=256 +6 %, b=1024 +12 %. Óptimo más chico que en (a) por el desbalance con b grande.
+
 ## (d) Configuraciones 0 a 3: speedup y eficiencia — 20 pts
 Elección y justificación de T(1). Tabla/gráfico speedup y eficiencia vs CPUs totales. Mejor configuración. Efecto de la forma del grid (1×2 vs 2×1, 2×4 vs 4×2).
 

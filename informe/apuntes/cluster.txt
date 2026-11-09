@@ -49,3 +49,16 @@ los resultados de (c), (d), (e), (f). Solo hechos; redactar después.
 5. Tiempos chicos de referencia (N=512, b=64, verify; t_max)
 - 1 nodo 4x2 T=1: 0.0073 s ; 1 nodo 2x2 T=2: 0.0064 s ; 2 nodos 4x2 T=1: 0.0218 s
   (la latencia entre nodos ya domina con N chico: comm 0.018 s de 0.022 s).
+
+6. Adelanto para la parte (e): mismo experimento en 1 nodo vs 2 nodos (jobs 37846 / 37845)
+   N=8192, b=512, grid 2x4, T=1, 8 procesos, 3 reps. Datos: results/cluster/test_2nodos.csv
+   - 1 nodo (ventress, config 3):  t_max mediana 2.67 s ; comp 1.4-2.0 s ; comm 0.6-1.2 s por proceso
+   - 2 nodos (config 4, 4 por nodo): t_max mediana 5.41 s ; comp 1.3-1.7 s en ventress y
+     1.9-2.5 s en yodaxico ; comm 2.9-4.5 s por proceso
+   => entre nodos la comunicación cuesta ~4x más (y el comm incluye la espera a los procesos
+      lentos de yodaxico, ~40% más lentos). La fila de procesos 0 (ventress) y la fila 1
+      (yodaxico) se sincronizan en cada paso vía los Bcast de columna.
+   => a los compañeros: para (e) separar los dos efectos (red vs nodo lento) conviene mirar
+      comp por host en el CSV (columna host) y no solo comm.
+   - Dato de N chico (N=512, 2 nodos): comm varió entre 0.018 s y 0.19 s en jobs distintos
+     (jobs 37828 vs 37839) -> la latencia entre nodos es ruidosa; usar >= 3 reps.

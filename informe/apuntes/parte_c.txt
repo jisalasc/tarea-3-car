@@ -1,0 +1,59 @@
+APUNTES PARTE (c): TAMAÑO DE BLOQUE b EN EL CLUSTER (10 pts)
+=============================================================
+Pregunta del enunciado: con N = 2^13 = 8192, configuración 2 (grid 2x2, T = 2 threads por
+proceso, 1 nodo), medir distintos b y elegir el que se usará en (d), (e), (f). Justificar.
+
+1. Cómo se midió
+- Job 37838 en ventress (fijado con --nodelist; ver apuntes/cluster.txt por qué), 8 cores físicos
+  (--threads-per-core=1), 4 procesos x 2 threads de OpenBLAS = 8 cores.
+- Un solo job (slurm/sweep_b.slurm) con b = 8192, 4096, ..., 64 y 3 repeticiones por b.
+  Tiempo total del job: 2 min 23 s.
+- t_max = max entre procesos del tiempo de pared de lu_distributed (tras un Barrier).
+  Se reporta la MEDIANA de las 3 reps; el min-max está en la tabla (ruido < 2%, mucho menos
+  que en la parte a del Mac).
+- comp/comm por proceso: t_comp = lu_factor + solve_triangular + matmul; t_comm = tiempo
+  dentro de los Bcast, que INCLUYE la espera por desbalance (un proceso sin trabajo en un paso
+  espera en el Bcast al que sí trabaja).
+- Datos: results/cluster/parte_c.csv (una fila por proceso y rep). Tabla y figura:
+  python scripts/plot_parte_c.py  ->  informe/figuras/parte_c.png
+
+2. Resultados (N=8192, 2x2, T=2, ventress)
+| b    | N/b | t_max med [s] | comp/proc | comm/proc | comm % | GFLOP/s | vs mejor |
+| 8192 |   1 | 8.062 | 1.911 | 4.082 | 68% |  45.5 | 3.11x |
+| 4096 |   2 | 6.520 | 1.881 | 3.324 | 64% |  56.2 | 2.52x |
+| 2048 |   4 | 3.918 | 1.824 | 1.857 | 50% |  93.6 | 1.51x |
+| 1024 |   8 | 2.905 | 1.820 | 1.020 | 36% | 126.2 | 1.12x |
+|  512 |  16 | 2.589 | 1.924 | 0.630 | 25% | 141.6 | 1.00x |  <- ELEGIDO
+|  256 |  32 | 2.738 | 2.250 | 0.460 | 17% | 133.8 | 1.06x |
+|  128 |  64 | 3.464 | 3.047 | 0.388 | 11% | 105.8 | 1.34x |
+|   64 | 128 | 5.096 | 4.672 | 0.391 |  8% |  71.9 | 1.97x |
+(comp/comm = promedio sobre los 4 procesos en la repetición mediana)
+
+3. Lectura de la tabla (argumentos para la justificación)
+- Hay dos efectos contrapuestos y el óptimo está en el medio:
+  (i) b GRANDE -> pocos bloques, mala distribución del trabajo (desbalance). Caso extremo
+      b = N = 8192: hay 1 solo bloque, lo tiene el proceso (0,0), que hace TODA la LU solo
+      (comp 7.7 s en rank 0, 0.000 en los demás); los otros 3 esperan en el Bcast (eso es el
+      "comm" de 4 s promedio). Es la LU serial con 2 threads: 8.06 s. Con b = 4096 hay 2x2
+      bloques y rank 3 (bloque A11) hace la actualización final él solo (comp 3.4 s vs 1.2 s
+      los demás). El desbalance aparece como comm.
+  (ii) b CHICO -> muchos pasos (N/b), cada uno con BLAS sobre bloques chicos (menos
+      eficiente, como en la parte a) y con más Bcast (latencia). comp sube de 1.8 s (b=1024)
+      a 4.7 s (b=64): la eficiencia de BLAS cae. comm deja de bajar en ~0.39 s: es el piso de
+      latencia de los 128 pasos x 4 Bcast.
+- b = 512 minimiza t_max: 2.59 s, 141.6 GFLOP/s. b = 256 está a 6% y b = 1024 a 12%; cualquiera
+  de los tres es razonable, 512 es el mínimo medido y deja comm en 25%.
+- Equilibrio: en b=512 cada proceso tiene 8x8 bloques locales (N/b = 16, 16/2 = 8 por dim),
+  la distribución bloque-cíclica reparte bien el triángulo restante.
+- Comparación con la parte (a) (serial, Mac, N=4096): allí el óptimo fue b=1024 porque solo
+  pesa (ii) sin comunicación ni desbalance; en el cluster distribuido el desbalance (i) castiga
+  más a los b grandes y corre el óptimo hacia abajo (512).
+- GFLOP/s: 141.6 con 8 cores = 17.7 por core; un core de ventress da ~25 GFLOP/s en serial
+  (apuntes/cluster.txt), o sea ~70% de eficiencia respecto del serial por core. El 25% de comm
+  explica casi todo ese gap.
+- Speedup "gratis" dentro de esta tabla: b=8192 es la LU serial con 2 threads (8.06 s) ->
+  b=512 con 4 procesos es 3.1x más rápido usando 4x más cores.
+
+4. Decisión
+b = 512 para (d), (e) y (f). (En (f) el enunciado pide comparar b=4096 vs b=512 con T=1 en
+2x2, consistente con esta elección.)
