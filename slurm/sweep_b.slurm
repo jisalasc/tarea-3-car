@@ -5,6 +5,7 @@
 #SBATCH --partition=hpc-iic3533
 #SBATCH --account=default-account
 #SBATCH --time=00:15:00
+#SBATCH --mem=4G
 #SBATCH --nodes=1
 #SBATCH --ntasks=4
 #SBATCH --ntasks-per-node=4

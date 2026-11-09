@@ -1,7 +1,8 @@
 # Scripts SLURM
 
 Todos incluyen los campos obligatorios del enunciado (`--qos`, `--partition`, `--account`), el
-`--comment` descriptivo que exige kraken (sin él `sbatch` rechaza el job) y
+`--comment` descriptivo que exige kraken (sin él `sbatch` rechaza el job), `--mem=4G` (sin él
+SLURM pide 233 GB y el job queda pendiente para siempre con `MaxMemPerLimit`) y
 fijan `OMP/OPENBLAS/MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK` vía `env.sh`.
 
 | Archivo | Para qué |

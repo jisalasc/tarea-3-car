@@ -5,6 +5,7 @@
 #SBATCH --partition=hpc-iic3533
 #SBATCH --account=default-account
 #SBATCH --time=00:05:00
+#SBATCH --mem=4G
 #SBATCH --output=slurm/logs/%x_%j.out
 #SBATCH --error=slurm/logs/%x_%j.err
 # Diagnóstico del cluster: qué CPUs nos asignan (¿cores físicos o hyperthreads?), versión de MPI,

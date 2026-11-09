@@ -5,6 +5,7 @@
 #SBATCH --partition=hpc-iic3533
 #SBATCH --account=default-account
 #SBATCH --time=00:15:00
+#SBATCH --mem=4G
 #SBATCH --output=slurm/logs/%x_%j.out
 #SBATCH --error=slurm/logs/%x_%j.err
 # --ntasks (p = pr*pc), --cpus-per-task (T), --nodes y --ntasks-per-node se pasan
