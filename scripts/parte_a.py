@@ -71,7 +71,7 @@ def main():
     fields = ["N", "b", "threads", "rep", "time_s", "gflops", "checksum", "residual", "host", "ts"]
     new = not os.path.exists(out)
     with open(out, "a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fields)
+        w = csv.DictWriter(f, fieldnames=fields, lineterminator="\n")
         if new:
             w.writeheader()
         for rep in range(args.reps):

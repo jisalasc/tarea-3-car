@@ -199,7 +199,7 @@ def write_csv(path, rows):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     new = not os.path.exists(path)
     with open(path, "a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0]))
+        w = csv.DictWriter(f, fieldnames=list(rows[0]), lineterminator="\n")
         if new:
             w.writeheader()
         w.writerows(rows)
