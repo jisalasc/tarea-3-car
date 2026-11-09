@@ -17,6 +17,7 @@ date: "16 de noviembre de 2026"
 Mostrar: tabla (b, mediana, min, max, GFLOP/s) + figura `informe/figuras/parte_a_mac_jose.png`. Máquina y condiciones. b elegido = 1024 (512–2048 equivalentes).
 
 ## (b) Implementación distribuida — 20 pts
+<!-- apuntes: informe/apuntes/parte_b.txt -->
 - Distribución bloque-cíclica y layout local (sub-arreglo contiguo ⇒ un matmul por paso).
 - Por paso k, con (r,c) = (k mod pr, k mod pc): tabla **operación colectiva / comunicador / raíz / tamaño**.
 - Medición separada de cómputo y comunicación por proceso (qué se cuenta en cada uno; la espera va en comunicación).

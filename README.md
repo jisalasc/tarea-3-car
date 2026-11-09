@@ -7,11 +7,11 @@ Factorización LU por bloques sobre un grid 2D de procesos MPI. Enunciado: [`doc
 ## Estructura
 ```
 src/lu_serial.py        LU por bloques serial del curso (parte a)  ✔ con matrix_entries para generar bloques
-src/lu_distributed.py   LU distribuida MPI (parte b)                ◐ infraestructura lista, núcleo con TODOs
+src/lu_distributed.py   LU distribuida MPI (parte b)                ✔ verificada vs serial (scripts/test_distributed.sh)
 src/layout.py           distribución bloque-cíclica (sin MPI)       ✔ testeada vs Figuras 1 y 2
 src/lu_serial.py        es el archivo del curso SIN modificar (copia en docs/lu_serial_original.py)
 tests/test_layout.py    python tests/test_layout.py
-scripts/                parte_a.py, run_local_mpi.sh, make_zip.sh
+scripts/                parte_a.py, plot_parte_a.py, test_distributed.sh, run_local_mpi.sh, make_zip.sh
 slurm/                  templates sbatch + planificador de cola (ver slurm/README.md)
 results/                CSV de mediciones (se versionan)           ver results/README.md
 informe/informe.md      esqueleto del informe
@@ -48,7 +48,8 @@ Ver [`slurm/README.md`](slurm/README.md) y la sección "Cluster" de `docs/ENUNCI
 ```bash
 conda activate tarea3
 python scripts/parte_a.py --check            # parte (a): N=4096, 1 thread, b=4096..64 → results/parte_a_<host>.csv
-scripts/run_local_mpi.sh 2 2 512 64          # parte (b) local con --verify (falla hasta implementar los TODOs)
+scripts/test_distributed.sh                  # parte (b): verificación en 12 grids
+scripts/run_local_mpi.sh 2 2 512 64          # un caso suelto con --verify
 python src/lu_distributed.py --help
 ```
 

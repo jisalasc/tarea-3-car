@@ -1,0 +1,126 @@
+PARTE (b) — lu_distributed.py  [20 pts]   (apuntes, NO redacción)
+==================================================================
+
+QUÉ PIDE EL ENUNCIADO
+1. Implementar lu_distributed.py que reciba N, b, pr, pc.                       -> hecho
+2. Medir POR SEPARADO cómputo y comunicación DE CADA PROCESO.                    -> hecho (t_comp, t_comm por rank)
+3. Explicar qué colectiva usa cada paso, en qué comunicador y con qué raíz.      -> tabla abajo
+4. Verificar correctitud respecto al serial y explicar cómo se procedió.         -> sección "verificación"
+5. Cuidado con oversubscription.                                                 -> sección "oversubscription"
+
+ARCHIVOS
+- src/lu_distributed.py  (núcleo: función lu_distributed(); grid: clase Grid; timers: clase Timers)
+- src/layout.py          (distribución bloque-cíclica, sin MPI; tests/test_layout.py la valida con las Figuras 1 y 2)
+- src/lu_serial.py       (del curso; de aquí se reutilizan matrix_entries() y lu_diag_block())
+- scripts/test_distributed.sh (verificación en 12 grids), scripts/run_local_mpi.sh (un caso)
+
+CÓMO SE REPARTE LA MATRIZ (decir esto antes de la tabla de colectivas)
+- Grid pr x pc, igual que el enunciado:
+      pr, pc = MPI.Compute_dims(size, 2)   (o --pr/--pc explícitos; se exige pr*pc == size)
+      myrow, mycol = rank // pc, rank % pc
+      row_comm = comm.Split(myrow, mycol)  -> los pc procesos de mi fila; MI RANK AHÍ ES mycol
+      col_comm = comm.Split(mycol, myrow)  -> los pr procesos de mi columna; MI RANK AHÍ ES myrow
+  (esto último es lo que define las raíces de los Bcast: raíz "c" en row_comm, raíz "r" en col_comm).
+- Bloque global A_IJ (b x b) pertenece a (I mod pr, J mod pc). Cada proceso guarda sus bloques-fila
+  I = myrow, myrow+pr, ... y sus bloques-columna J = mycol, mycol+pc, ... en UN SOLO arreglo 2D local
+  de (nlr*b) x (nlc*b), ordenados por índice global. Bloque local (i,j) = global (myrow+i*pr, mycol+j*pc).
+- Cada proceso genera sus bloques con matrix_entries(filas_globales, columnas_globales, N) del
+  lu_serial.py del curso: no hay scatter inicial, no hay comunicación para construir A, y la matriz es
+  exactamente la misma que la del serial (independiente de b y del grid).
+- En el paso k: i_start = cantidad de mis bloques-fila con I <= k; j_start = ídem columnas. Entonces
+  mis bloques de la submatriz restante son Aloc[i_start*b:, j_start*b:] -> SUB-ARREGLO CONTIGUO ->
+  la actualización es UN SOLO matmul por proceso y paso. i_start es igual para todos los procesos de
+  una misma fila del grid (y j_start para una misma columna): por eso el receptor de un panel sabe
+  su tamaño sin que nadie se lo diga (tests/test_layout.py lo chequea).
+- Soporta nb = N/b NO múltiplo de pr o pc (p.ej. N=640, b=64, grid 2x3: nb=10) y b = N (nb=1).
+
+PASO k: COLECTIVAS (tabla para el informe).  (r, c) = (k mod pr, k mod pc) = dueño de A_kk.
+| paso | quién | operación               | comunicador | raíz | tamaño        | quién la llama                     |
+|------|-------|-------------------------|-------------|------|---------------|------------------------------------|
+| 1    | (r,c) | lu_factor(A_kk) local   | -           | -    | -             | sólo (r,c)                         |
+| 1    | fila r| Bcast(A_kk)             | row_comm    | c    | b*b           | los pc procesos de la fila r       |
+| 1    | col c | Bcast(A_kk)             | col_comm    | r    | b*b           | los pr procesos de la columna c    |
+| 2    | fila r| solve_triangular U_kj   | -           | -    | b x (nlc-j_start)*b | procesos de la fila r con J>k |
+| 3    | col c | solve_triangular L_ik   | -           | -    | (nlr-i_start)*b x b | procesos de la columna c con I>k |
+| 4    | todos | Bcast(panel L apilado)  | row_comm    | c    | (nlr-i_start)*b*b | TODOS (en cada fila del grid la raíz es el proceso de la columna c) |
+| 4    | todos | Bcast(panel U apilado)  | col_comm    | r    | b*(nlc-j_start)*b | TODOS (en cada columna del grid la raíz es el proceso de la fila r) |
+| 5    | todos | Aloc[rest] -= L @ U     | -           | -    | -             | todos los que tienen I>k y J>k     |
+Notas:
+- Sólo se usan Bcast (no hay Send/Recv punto a punto ni Scatter/Gather en la factorización).
+- Los Bcast del paso 1 NO los llaman los procesos que no están ni en la fila r ni en la columna c:
+  como row_comm de la fila r sólo contiene a los de esa fila, la colectiva es consistente igual.
+- Los Bcast del paso 4 los llaman TODOS los procesos: cada fila del grid tiene exactamente un proceso
+  en la columna c (su raíz), y cada columna del grid tiene uno en la fila r.
+- Si un proceso no tiene bloques con I>k (i_start == nlr) su panel L tiene 0 filas: igual participa en
+  el Bcast con un arreglo de 0 elementos (así nadie se desincroniza).
+- Ejemplo concreto para el informe: el de la Figura 2 del enunciado (k=2, grid 2x3): A22 en (0,2);
+  Bcast fila 0 raíz c=2 -> (0,0),(0,1); Bcast columna 2 raíz r=0 -> (1,2); U23,U24,U25 en (0,0),(0,1),(0,2);
+  L32,L52 en (1,2) y L42 en (0,2); (1,1) recibe L32,L52 por row_comm (raíz (1,2)) y U24 por col_comm
+  (raíz (0,1)) y hace UNA actualización de [A34; A54] -= [L32; L52] @ U24.
+- Costo de comunicación por paso: 2 Bcast de b^2 + Bcast de (N-(k+1)b)*b/pr + Bcast de b*(N-(k+1)b)/pc
+  (sirve para la parte g).
+
+MEDICIÓN DE TIEMPOS (convención; explicarla en el informe porque afecta la interpretación)
+- Cada proceso acumula con MPI.Wtime():
+    t_comp = lu_factor + solve_triangular (paneles) + matmul (actualización) + copias a buffers contiguos.
+    t_comm = tiempo DENTRO de los Bcast.
+- IMPORTANTE: t_comm incluye la ESPERA. Si un proceso llega al Bcast antes que la raíz (porque la raíz
+  está todavía calculando el panel), ese tiempo de espera cuenta como "comunicación". Así que t_comm es
+  "comunicación + desbalance". Esto es lo que hace que en (f) con b=N/2 los procesos que no tienen nada
+  que hacer muestren t_comm enorme y t_comp ~ 0.
+- Hay un Barrier antes de arrancar el cronómetro; t_wall es el wall de cada proceso y t_max (= tiempo de
+  la corrida) es el máximo entre procesos (Allreduce MAX).
+- Salida: una fila por proceso y repetición en el CSV (columnas en results/README.md).
+- t_comp + t_comm ~ t_wall (lo que falta es Python/allocaciones, despreciable).
+
+VERIFICACIÓN DE CORRECTITUD (cómo se procedió)
+1. Misma matriz: ambas versiones usan matrix_entries() del curso, que depende sólo de los índices
+   globales (no de b ni del grid). Se chequeó además que los bloques locales de cada proceso coinciden
+   exactamente con la submatriz correspondiente de la matriz global.
+2. --verify: al terminar, cada proceso manda sus bloques a rank 0 (comm.gather), rank 0 reconstruye
+   la LU global N x N y (i) corre lu_blocked() del lu_serial.py del curso sobre la misma A con el MISMO b,
+   y compara elemento a elemento: max|LU_dist - LU_serial| / max|LU_serial|; (ii) calcula el residuo
+   ||A - L U||_F / ||A||_F con residual() del curso.
+3. Resultado: diferencia EXACTAMENTE 0.0 en todos los casos (la distribuida hace las mismas operaciones
+   BLAS sobre los mismos bloques en el mismo orden, así que el resultado es bit a bit idéntico) y
+   residuo ~1.6e-16 a 2.2e-16 (precisión de máquina).
+4. Casos probados (scripts/test_distributed.sh, todos PASS):
+   grid 1x1 (N=512,b=64) -> equivale al serial;  2x2 con b=64, 256 y b=N=512 (nb=1);
+   1x4 y 4x1 (grids degenerados: sólo row_comm o sólo col_comm hacen algo);
+   2x3 (N=384,b=32 -> nb=12, el de la Figura 1 escalado);  2x3 y 3x2 con N=640,b=64 -> nb=10, NO múltiplo
+   de pr ni pc;  2x4 (N=1024,b=128) y 4x2 (N=1024,b=64) -> los grids de la configuración 3;
+   2x2 con N=1000, b=100 (N no potencia de 2).
+   Además --layout-only reproduce la Figura 1 (el proceso (0,1) tiene A01 A04 A21 A24 A41 A44) y
+   tests/test_layout.py chequea la Figura 2 (dueños de A22, U2j, Li2 y los bloques restantes de (1,1)).
+5. El gather sólo se usa con --verify (N chico): para N=8192 la matriz completa son 512 MB, no cabe
+   en el presupuesto del cluster y además no es parte de la factorización.
+
+OVERSUBSCRIPTION
+- Cada proceso MPI usa T threads de BLAS: en total pr*pc*T hilos activos. Si supera los cores físicos,
+  los hilos compiten y los tiempos se disparan (y se vuelven ruidosos).
+- Local: T=1 siempre (OMP_NUM_THREADS/OPENBLAS_NUM_THREADS/MKL_NUM_THREADS=1 fijados por --threads
+  ANTES de importar numpy) y pr*pc <= cores físicos (en el Mac, 10 cores: hasta 8 procesos).
+- Cluster: T = $SLURM_CPUS_PER_TASK y ntasks*cpus-per-task <= 8 por nodo, que es lo que SLURM asigna.
+  Así ningún job pide más hilos que CPUs reservadas.
+
+MEDICIONES LOCALES DE REFERENCIA (Mac, T=1, N=4096, b=512; sólo para mostrar que el reparto funciona,
+los experimentos de verdad son en el cluster)
+- comando: mpirun -n P python src/lu_distributed.py --N 4096 --b 512 --pr .. --pc .. --threads 1 --reps 2
+- 1x1: t_max = 0.856 s, comp 0.847 / comm 0.000  -> igual que el serial con b=512 (0.853 s): el código
+       distribuido no agrega overhead apreciable cuando hay un solo proceso.
+- 2x2: t_max = 0.345 s  (speedup 2.47 con 4 procesos, eficiencia 62%)
+       r0 (0,0): comp 0.199 / comm 0.131   r1 (0,1): comp 0.231 / comm 0.111
+       r2 (1,0): comp 0.232 / comm 0.109   r3 (1,1): comp 0.272 / comm 0.070
+       -> desbalance: (1,1) tiene los bloques con I,J impares, que quedan en la submatriz restante más
+          pasos y reciben más actualizaciones; (0,0) termina antes y espera (su comm es el mayor).
+          Con nb = 8 bloques por lado y grid 2x2 el reparto cíclico todavía es grueso.
+- 2x4: t_max = 0.329 s  (speedup 2.6 con 8 procesos, eficiencia 33%): comm ya es ~50% del tiempo.
+       En un laptop los 8 procesos comparten memoria y caché; los Bcast de paneles de 512 x 2048
+       floats (8 MB) cuestan. Esto NO es representativo del cluster, sólo muestra que medir funciona.
+
+QUÉ MOSTRAR EN EL INFORME
+- La tabla de colectivas (paso, operación, comunicador, raíz, tamaño), con el ejemplo de la Figura 2.
+- Un párrafo del layout local (sub-arreglo contiguo => un matmul) con i_start/j_start.
+- La convención de medición (t_comm incluye espera).
+- Cómo se verificó + tabla corta de casos PASS con diff = 0 y residuo ~1e-16.
+- Cómo se evitó oversubscription.

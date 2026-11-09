@@ -8,18 +8,18 @@ Entrega: **lunes 16 de noviembre 23:59**. Hoy (sábado 7) queda el repo iniciali
 - [x] `src/lu_serial.py`: **archivo del curso sin modificar** (copia en `docs/lu_serial_original.py`). Su `matrix_entries(rows, cols, N)` genera cualquier bloque desde índices globales → el distribuido genera sólo sus bloques sin comunicación.
 - [x] `scripts/parte_a.py`: wrapper de la parte (a) (1 thread, repeticiones, CSV + metadata del entorno).
 - [x] `src/layout.py` + `tests/test_layout.py`: distribución bloque-cíclica validada contra las Figuras 1 y 2 del PDF.
-- [x] `src/lu_distributed.py`: grid, comunicadores, construcción local, cronómetros cómputo/comunicación, `--verify`, CSV, `--layout-only`.
-      **Falta el núcleo del paso k (TODOs 1–5).**
+- [x] `src/lu_distributed.py`: **parte (b) implementada y verificada** (`scripts/test_distributed.sh`: 12 grids, diff = 0 vs serial).
+- [x] Parte (a) corrida en el Mac de José: mejor b = 1024 (`results/parte_a_mac_jose.csv`, `informe/apuntes/parte_a.txt`).
 - [x] Scripts SLURM con los campos obligatorios, planificador de jobs y envío respetando la cola.
 - [ ] Nada corrido aún en el cluster. Nadie ha validado todavía `mpirun` multi-nodo en kraken.
 
 ## División propuesta (ajustar entre los tres)
 
 ### Persona A — núcleo (José Ignacio, parte b + a)
-1. Implementar los TODOs 1–5 de `lu_distributed()` (`src/lu_distributed.py`). Probar local con `scripts/run_local_mpi.sh 2 2 512 64`, luego 2×3, 1×4, 4×1, 1×1 y b=N (nb=1).
-2. `--verify` debe dar PASS en todos. Probar también `N/b` no múltiplo de pr/pc (p. ej. N=640, b=64, grid 2×3).
-3. Correr parte (a): `python scripts/parte_a.py --check` (1 thread, N=4096, cerrar apps pesadas). Elegir b.
-4. Escribir en el informe la sección (b): colectiva / comunicador / raíz por paso, y el método de verificación.
+1. ~~Implementar el núcleo~~ hecho (9 nov). `scripts/test_distributed.sh` pasa en 12 casos.
+2. ~~Parte (a)~~ hecha (9 nov): b = 1024.
+3. Redactar (a) y (b) en el informe a partir de `informe/apuntes/parte_a.txt` y `parte_b.txt`.
+4. Apoyar a B con el cluster y a C con los gráficos de (d)–(f).
 
 ### Persona B — cluster (configurar temprano, es el riesgo mayor)
 1. Acceso a kraken (`ssh kraken`), Miniconda, `conda env create -f environment.yml`, `git clone` del repo.

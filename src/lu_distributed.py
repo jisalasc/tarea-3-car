@@ -7,10 +7,9 @@ Uso:
     mpirun -n $SLURM_NTASKS python src/lu_distributed.py --N 8192 --b 256 --pr 2 --pc 2 \
         --threads $SLURM_CPUS_PER_TASK --out results/cluster/config2.csv
 
-ESTADO: infraestructura lista (grid, comunicadores, distribución bloque-cíclica,
-generación local de A, cronómetros cómputo/comunicación, verificación contra
-lu_serial.py, salida CSV). El NÚCLEO del paso k está marcado con TODO en
-lu_distributed(). Ver docs/ENUNCIADO.md ("Paso k distribuido") y docs/PLAN.md.
+Implementa el "paso k distribuido" del enunciado (ver docs/ENUNCIADO.md) sobre la
+distribución bloque-cíclica de src/layout.py. Usa lu_diag_block y matrix_entries del
+lu_serial.py del curso, así la matriz y el bloque diagonal son idénticos al serial.
 
 Convención de medición (hay que explicarla en el informe):
     t_comp: tiempo en lu_factor / solve_triangular / @ (cómputo local).
@@ -42,11 +41,11 @@ _set_blas_threads_early()
 
 import numpy as np  # noqa: E402
 from mpi4py import MPI  # noqa: E402
-from scipy.linalg import lu_factor, solve_triangular  # noqa: E402,F401
+from scipy.linalg import solve_triangular  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from layout import BlockCyclic  # noqa: E402
-from lu_serial import matrix_entries  # noqa: E402  (archivo del curso: misma matriz que la versión serial)
+from lu_serial import lu_diag_block, matrix_entries  # noqa: E402  (archivo del curso)
 
 
 # ----------------------------------------------------------------------------
@@ -100,49 +99,69 @@ def lu_distributed(Aloc, bc, grid, tm):
 
     Al terminar, cada bloque local contiene su L_IJ (I > J), U_IJ (I < J) o
     L_II / U_II empaquetados (I == J), igual que lu_serial.lu_blocked.
+
+    Colectivas por paso k, con (r, c) = (k mod pr, k mod pc) el dueño de A_kk:
+      1. row_comm.Bcast(A_kk, root=c)   sólo lo llaman los pc procesos de la fila r
+         col_comm.Bcast(A_kk, root=r)   sólo lo llaman los pr procesos de la columna c
+      4. row_comm.Bcast(L_panel, root=c)  lo llaman TODOS (cada fila del grid tiene un
+                                          proceso en la columna c que es la raíz)
+         col_comm.Bcast(U_panel, root=r)  lo llaman TODOS (cada columna del grid tiene
+                                          un proceso en la fila r que es la raíz)
+    Las raíces son ranks DENTRO del comunicador: en row_comm el rank es mycol, en
+    col_comm el rank es myrow (así se construyeron los Split).
     """
     b, nb = bc.b, bc.nb
+    nlr, nlc = bc.nlr, bc.nlc
     for k in range(nb):
         r, c = k % grid.pr, k % grid.pc           # proceso dueño de A_kk
         in_row_r, in_col_c = grid.myrow == r, grid.mycol == c
         i_start = bc.first_local_row_after(k)     # bloques-fila locales con I > k: i >= i_start
         j_start = bc.first_local_col_after(k)     # bloques-col locales con J > k: j >= j_start
-        # Offsets (en elementos) dentro de Aloc:
-        #   bloque A_kk local (sólo si in_row_r and in_col_c): [lk*b:(lk+1)*b, lc*b:(lc+1)*b]
-        #   panel U (fila r): Aloc[lk*b:(lk+1)*b, j_start*b:]       (b x (nlc-j_start)*b)
-        #   panel L (col c):  Aloc[i_start*b:, lc*b:(lc+1)*b]       ((nlr-i_start)*b x b)
-        #   restante:         Aloc[i_start*b:, j_start*b:]
+        has_rows, has_cols = i_start < nlr, j_start < nlc
         lk = bc.local_block_row(k) if in_row_r else None
         lc = bc.local_block_col(k) if in_col_c else None
 
-        # TODO(parte b) 1. Bloque diagonal: (r,c) factoriza A_kk (lu_factor, verificar
-        #    piv == arange) y lo difunde: row_comm.Bcast(Akk, root=c) entre los procesos
-        #    de la fila r; col_comm.Bcast(Akk, root=r) entre los de la columna c.
-        #    Los procesos que no están ni en la fila r ni en la columna c no lo necesitan.
-        #    (Ojo: Bcast es colectivo sobre TODO el comunicador; row_comm de la fila r
-        #    sólo contiene procesos de esa fila, así que sólo ellos lo llaman.)
-        #
-        # TODO(parte b) 2. Panel de U (procesos de la fila r, con bloques J > k):
-        #    U_kj = L_kk^{-1} A_kj  -> solve_triangular(Akk, panel, lower=True, unit_diagonal=True)
-        #    sobre Aloc[lk*b:(lk+1)*b, j_start*b:] en UNA llamada.
-        #
-        # TODO(parte b) 3. Panel de L (procesos de la columna c, con bloques I > k):
-        #    L_ik = A_ik U_kk^{-1}  -> solve_triangular(Akk, panel.T, lower=False, trans='T').T
-        #    sobre Aloc[i_start*b:, lc*b:(lc+1)*b] en UNA llamada.
-        #
-        # TODO(parte b) 4. Envío de paneles:
-        #    - En cada fila del grid, el proceso de la columna c difunde su panel L
-        #      (bloques L_ik con I > k, apilados): row_comm.Bcast(Lpanel, root=c).
-        #      Todos los procesos de la misma fila tienen el MISMO i_start (test_layout),
-        #      así que el receptor sabe el tamaño: ((nlr - i_start)*b, b).
-        #    - En cada columna del grid, el proceso de la fila r difunde su panel U:
-        #      col_comm.Bcast(Upanel, root=r). Tamaño (b, (nlc - j_start)*b).
-        #    Si el panel es vacío (i_start == nlr), Bcast de un arreglo de 0 elementos.
-        #
-        # TODO(parte b) 5. Actualización (todos): Aloc[i_start*b:, j_start*b:] -= Lpanel @ Upanel
-        #
-        # Envolver 1,2,3,5 en `with tm.computing():` y los Bcast en `with tm.communicating():`.
-        raise NotImplementedError("Parte (b): implementar los pasos 1-5 del paso k (ver TODOs)")
+        # 1. Bloque diagonal: el dueño factoriza A_kk in-place y lo difunde en su fila y su columna.
+        Akk = np.empty((b, b))
+        if in_row_r and in_col_c:
+            with tm.computing():
+                lu_diag_block(Aloc[lk * b:(lk + 1) * b, lc * b:(lc + 1) * b])
+                Akk[:] = Aloc[lk * b:(lk + 1) * b, lc * b:(lc + 1) * b]
+        if in_row_r:
+            with tm.communicating():
+                grid.row_comm.Bcast(Akk, root=c)
+        if in_col_c:
+            with tm.communicating():
+                grid.col_comm.Bcast(Akk, root=r)
+
+        # 2. Panel de U (fila r): U_kj = L_kk^{-1} A_kj para todos mis J > k, en una llamada.
+        if in_row_r and has_cols:
+            with tm.computing():
+                blk = Aloc[lk * b:(lk + 1) * b, j_start * b:]
+                blk[:] = solve_triangular(Akk, blk, lower=True, unit_diagonal=True, check_finite=False)
+
+        # 3. Panel de L (columna c): L_ik = A_ik U_kk^{-1} para todos mis I > k, en una llamada.
+        if in_col_c and has_rows:
+            with tm.computing():
+                blk = Aloc[i_start * b:, lc * b:(lc + 1) * b]
+                blk[:] = solve_triangular(Akk, blk.T, lower=False, trans="T", check_finite=False).T
+
+        # 4. Envío de paneles. Tamaños conocidos por el receptor: todos los procesos de una
+        #    misma fila del grid comparten i_start; los de una misma columna comparten j_start.
+        Lpanel = np.empty(((nlr - i_start) * b, b))
+        Upanel = np.empty((b, (nlc - j_start) * b))
+        if in_col_c and has_rows:
+            Lpanel[:] = Aloc[i_start * b:, lc * b:(lc + 1) * b]
+        if in_row_r and has_cols:
+            Upanel[:] = Aloc[lk * b:(lk + 1) * b, j_start * b:]
+        with tm.communicating():
+            grid.row_comm.Bcast(Lpanel, root=c)
+            grid.col_comm.Bcast(Upanel, root=r)
+
+        # 5. Actualización de la submatriz restante: un solo matmul por proceso.
+        if has_rows and has_cols:
+            with tm.computing():
+                Aloc[i_start * b:, j_start * b:] -= Lpanel @ Upanel
     return Aloc
 
 
