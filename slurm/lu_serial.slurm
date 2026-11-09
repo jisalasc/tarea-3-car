@@ -6,6 +6,7 @@
 #SBATCH --account=default-account
 #SBATCH --time=00:15:00
 #SBATCH --mem=4G
+#SBATCH --threads-per-core=1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1

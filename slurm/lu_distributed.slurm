@@ -6,6 +6,7 @@
 #SBATCH --account=default-account
 #SBATCH --time=00:15:00
 #SBATCH --mem=4G
+#SBATCH --threads-per-core=1
 #SBATCH --output=slurm/logs/%x_%j.out
 #SBATCH --error=slurm/logs/%x_%j.err
 # --ntasks (p = pr*pc), --cpus-per-task (T), --nodes y --ntasks-per-node se pasan
@@ -17,5 +18,5 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 source slurm/env.sh
 echo "job=$SLURM_JOB_ID N=$N b=$B grid=${PR}x${PC} T=$SLURM_CPUS_PER_TASK ntasks=$SLURM_NTASKS nodes=$SLURM_JOB_NUM_NODES tpn=${SLURM_NTASKS_PER_NODE:-?} nodelist=$SLURM_JOB_NODELIST"
-mpirun -n "$SLURM_NTASKS" python src/lu_distributed.py --N "$N" --b "$B" --pr "$PR" --pc "$PC" \
+$LAUNCH python src/lu_distributed.py --N "$N" --b "$B" --pr "$PR" --pc "$PC" \
     --threads "$SLURM_CPUS_PER_TASK" --reps "${REPS:-3}" --out "$OUT"

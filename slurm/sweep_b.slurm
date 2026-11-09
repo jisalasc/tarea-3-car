@@ -6,6 +6,7 @@
 #SBATCH --account=default-account
 #SBATCH --time=00:15:00
 #SBATCH --mem=4G
+#SBATCH --threads-per-core=1
 #SBATCH --nodes=1
 #SBATCH --ntasks=4
 #SBATCH --ntasks-per-node=4
@@ -21,6 +22,6 @@ source slurm/env.sh
 N=${N:-8192}
 for B in ${B_LIST:-8192 4096 2048 1024 512 256 128 64}; do
   echo "=== b=$B"
-  mpirun -n "$SLURM_NTASKS" python src/lu_distributed.py --N "$N" --b "$B" --pr 2 --pc 2 \
+  $LAUNCH python src/lu_distributed.py --N "$N" --b "$B" --pr 2 --pc 2 \
       --threads "$SLURM_CPUS_PER_TASK" --reps "${REPS:-3}" --out "$OUT"
 done

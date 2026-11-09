@@ -6,6 +6,7 @@
 #SBATCH --account=default-account
 #SBATCH --time=00:06:00
 #SBATCH --mem=4G
+#SBATCH --threads-per-core=1
 #SBATCH --output=slurm/logs/%x_%j.out
 #SBATCH --error=slurm/logs/%x_%j.err
 # Diagnóstico del cluster: qué CPUs nos asignan (¿cores físicos o hyperthreads?), velocidad de
