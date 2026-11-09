@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=check
+#SBATCH --comment="IIC3533 T3: diagnostico de CPUs asignadas y de mpirun multi-nodo antes de los experimentos"
 #SBATCH --qos=hpc-iic3533
 #SBATCH --partition=hpc-iic3533
 #SBATCH --account=default-account

@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=lu_serial
+#SBATCH --comment="IIC3533 T3: LU por bloques serial de referencia para calcular speedup"
 #SBATCH --qos=hpc-iic3533
 #SBATCH --partition=hpc-iic3533
 #SBATCH --account=default-account

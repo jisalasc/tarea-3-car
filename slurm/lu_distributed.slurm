@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=lu_dist
+#SBATCH --comment="IIC3533 T3: LU por bloques distribuida con mpi4py, tiempos por configuracion de grid y threads"
 #SBATCH --qos=hpc-iic3533
 #SBATCH --partition=hpc-iic3533
 #SBATCH --account=default-account

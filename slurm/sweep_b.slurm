@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=lu_sweep_b
+#SBATCH --comment="IIC3533 T3 parte c: barrido del tamano de bloque b en grid 2x2 con 2 threads"
 #SBATCH --qos=hpc-iic3533
 #SBATCH --partition=hpc-iic3533
 #SBATCH --account=default-account

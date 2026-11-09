@@ -1,6 +1,7 @@
 # Scripts SLURM
 
-Todos incluyen los campos obligatorios del enunciado (`--qos`, `--partition`, `--account`) y
+Todos incluyen los campos obligatorios del enunciado (`--qos`, `--partition`, `--account`), el
+`--comment` descriptivo que exige kraken (sin él `sbatch` rechaza el job) y
 fijan `OMP/OPENBLAS/MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK` vía `env.sh`.
 
 | Archivo | Para qué |
@@ -20,6 +21,30 @@ slurm/plan_jobs.sh 3 256 >> slurm/queue.txt
 slurm/submit_next.sh                            # repetir cuando se liberen cupos
 squeue -u $USER ; tail -f slurm/logs/*.out
 ```
+
+## Entorno en kraken (ya instalado en la cuenta del grupo)
+
+kraken no trae `mpi4py` ni `module`; el enunciado recomienda Miniconda. Ya está instalado
+en `~/miniconda3` con el env `tarea3` creado desde `environment.yml`, y el repo clonado en
+`~/tarea-3-car`. Para usarlo basta con `git pull` y lanzar los `sbatch`.
+
+Si hay que recrearlo desde cero:
+
+```bash
+cd ~ && wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+bash miniconda.sh -b -p $HOME/miniconda3 && rm miniconda.sh
+source ~/miniconda3/etc/profile.d/conda.sh
+# Solo conda-forge: con el canal `defaults` conda exige aceptar los Terms of Service de Anaconda.
+# El instalador deja ~/miniconda3/.condarc con `defaults`; hay que sobrescribir ambos archivos.
+printf "channels:\n  - conda-forge\nchannel_priority: strict\n" > ~/.condarc
+printf "channels:\n  - conda-forge\n" > ~/miniconda3/.condarc
+conda config --show channels      # debe listar solo conda-forge
+git clone https://github.com/jisalasc/tarea-3-car.git ~/tarea-3-car
+cd ~/tarea-3-car && conda env create -f environment.yml -y
+```
+
+Nota: `~/scratch` es un symlink roto; trabajar en `~`. El home es NFS, la instalación tarda
+varios minutos.
 
 Límites por grupo: 8 CPUs y 4 GB por nodo, 15 min por job, 4 en cola, 1 corriendo.
 Nodos: `ventress` y `yodaxico`. Documentación: https://cluster.cenia.cl/.
