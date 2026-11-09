@@ -48,8 +48,16 @@ Nota: `~/scratch` es un symlink roto; trabajar en `~`. El home es NFS, la instal
 varios minutos.
 
 Límites por grupo: 8 CPUs y 4 GB por nodo, 15 min por job, 4 en cola, 1 corriendo.
+
+## Lo que aprendimos del diagnóstico (`check_cluster.slurm`, jobs 37826-37840)
+
+- Las 8 "CPUs" son 4 cores físicos con hyperthreading. Con `--threads-per-core=1` (ya en
+  todos los scripts) SLURM entrega 8 cores físicos distintos.
+- Los nodos son distintos: ventress (Xeon E5-2640 v4, ~25 GFLOP/s por core) y yodaxico (Xeon
+  Silver 4210R, ~18 GFLOP/s por core). `plan_jobs.sh` fija los jobs de 1 nodo a ventress
+  (`NODE=... slurm/plan_jobs.sh` para cambiarlo, `NODE=""` para no fijar).
+- `mpirun` a secas falla por binding; el lanzador es `srun --mpi=pmix` (variable `LAUNCH` en
+  `env.sh`). Detalle completo en `informe/apuntes/cluster.txt`.
 Nodos: `ventress` y `yodaxico`. Documentación: https://cluster.cenia.cl/.
 
-**Pendiente de validar el primer día en el cluster:** que `mpirun` del env conda funcione
-dentro de un job de SLURM con 2 nodos (configs 4 y 5). Si no levanta procesos en el
-segundo nodo, usar `srun --mpi=pmix python ...` o el MPI del sistema (`module avail`).
+**Validado el 9 nov:** `srun --mpi=pmix` levanta los procesos en los 2 nodos (ver arriba).

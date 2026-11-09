@@ -1,0 +1,51 @@
+APUNTES: CLUSTER KRAKEN (hechos medidos el 9 nov 2026, jobs 37826-37840)
+=========================================================================
+Para la sección de metodología / setup experimental del informe y para interpretar
+los resultados de (c), (d), (e), (f). Solo hechos; redactar después.
+
+1. Acceso y entorno
+- Cuenta de grupo grupo41-iic3533, nodo de entrada kraken.ing.puc.cl:33052.
+- El sistema trae Python 3.12 + numpy + scipy pero NO mpi4py ni `module`. El enunciado
+  recomienda Miniconda: instalado en ~/miniconda3, env `tarea3` desde environment.yml.
+  Versiones idénticas a las del Mac: mpi4py 4.1.2, numpy 2.4.6, scipy 1.17.1, Open MPI 5.0.11
+  (conda-forge). Open MPI del sistema: 4.1.6 (no se usa).
+- SLURM exige: --qos=hpc-iic3533 --partition=hpc-iic3533 --account=default-account,
+  --comment="..." (si no, rechaza el job) y --mem=4G (si no, pide 233 GB y queda PD por
+  MaxMemPerLimit). Límites: 8 CPUs y 4 GB por nodo, 15 min, 1 job corriendo, 4 encolados.
+
+2. Hardware (dos nodos DISTINTOS)
+- ventress: Intel Xeon E5-2640 v4 @ 2.40 GHz (Broadwell, AVX2), 2 sockets x 10 cores x 2 HT,
+  L2 256 KB/core, L3 25 MB/socket.
+- yodaxico: Intel Xeon Silver 4210R @ 2.40 GHz (Cascade Lake, AVX-512), 2 x 10 x 2 HT,
+  L2 1 MB/core, L3 13.75 MB/socket.
+- lu_serial N=2048 b=256 con 1 thread, medido en el mismo job (37828):
+    ventress 0.224 s = 25.5 GFLOP/s   |   yodaxico 0.323 s = 17.7 GFLOP/s
+  (otras mediciones en ventress: 0.295, 0.213, 0.214, 0.289 s -> hay ruido ~30%, probablemente
+  por otros jobs en el nodo; usar mediana de 3 reps.)
+  => los jobs de 1 nodo se fijan con --nodelist=ventress para que sean comparables entre sí.
+  => en los jobs de 2 nodos (configs 4 y 5) la mitad de los procesos corre en un nodo ~30% más
+     lento: el tiempo lo marca el proceso más lento (t_max). Argumento para (e)/(f).
+- Referencia: Mac M5 un core ~54 GFLOP/s (parte a) = 2x un core de ventress.
+
+3. Las "8 CPUs" son hyperthreads, salvo que se pida lo contrario
+- Sin opciones extra, 8 CPUs = 4 cores físicos con sus 2 hilos (cpu0/20, 1/21, 2/22, 3/23).
+  En 2 nodos con 4 CPUs por nodo = 2 cores físicos por nodo.
+- Con `--threads-per-core=1` (o --hint=nomultithread) SLURM da 8 cores físicos distintos
+  (cpu0..7) y reserva el core completo (AllocTRES cpu=16). Lo usamos en TODOS los scripts.
+  => T threads de BLAS por proceso corren en T cores reales; p*T <= 8 cores por nodo.
+
+4. Lanzador MPI dentro del job (3 modos probados, 1 y 2 nodos, verify PASS en todos)
+- `mpirun -n 8` a secas FALLA: Open MPI 5 liga por core, ve 4 cores, aborta
+  ("binding ... more cpus than are available in your allocation").
+- `mpirun --bind-to none`: corre, pero en 2 nodos el comm fue 10x más lento (0.213 s vs 0.019 s
+  para N=512): sin afinidad los procesos migran.
+- `mpirun --use-hwthread-cpus`: corre, 1 proceso por hyperthread. OK.
+- `srun --mpi=pmix --ntasks=p --cpus-per-task=T` (ELEGIDO): SLURM reparte entre nodos y liga
+  cada proceso a sus T CPUs. Rank 0-3 en ventress, 4-7 en yodaxico. Imprime un aviso
+  "Component: munge" inofensivo.
+- Corrección distribuida vs serial en el cluster: diferencia máxima 0 (1 nodo) y 4.4e-16
+  (2 nodos, por BLAS distintos en cada CPU), residuo 1.5e-16.
+
+5. Tiempos chicos de referencia (N=512, b=64, verify; t_max)
+- 1 nodo 4x2 T=1: 0.0073 s ; 1 nodo 2x2 T=2: 0.0064 s ; 2 nodos 4x2 T=1: 0.0218 s
+  (la latencia entre nodos ya domina con N chico: comm 0.018 s de 0.022 s).
