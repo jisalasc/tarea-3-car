@@ -1,0 +1,55 @@
+APUNTES PARTE (e): CONFIGURACIONES EN DOS NODOS (15 pts)
+========================================================
+Pregunta del enunciado: Con N = 2^13 y los valores de b obtenidos en (a) y en (c), ejecutar
+las configuraciones 4 (2x4, 2 nodos) y 5 (4x4, 2 nodos). Comparar la configuración 4 con el
+mismo grid en 1 nodo (configuración 3), separando cómputo y comunicación, y relacionar con la
+latencia y el ancho de banda dentro de un nodo y entre nodos.
+
+1. Cómo se midió y cómo regenerar cuando lleguen config3.csv, config4.csv y config5.csv
+- Datos actuales (adelanto validado): results/cluster/test_2nodos.csv (jobs 37846 y 37845,
+  N = 8192, b = 512, grid 2x4, T = 1, en 1 nodo y en 2 nodos, 3 repeticiones).
+- Script:
+    python scripts/plot_parte_e.py
+  Cuando la tercera persona corra las configuraciones 3, 4 y 5 (con b = 512 y/o b = 1024), basta ejecutar:
+    python scripts/plot_parte_e.py --csv results/cluster/config3.csv results/cluster/config4.csv results/cluster/config5.csv
+  lo que actualiza automáticamente las dos tablas en consola y la figura informe/figuras/parte_e.png.
+
+2. Resultados medidos: Config 3 (1 nodo) vs Config 4 (2 nodos) con grid 2x4, T = 1, b = 512
+| b   | grid | nodos | CPUs | t_max med [s] | min [s] | max [s] | comp prom [s] | comm prom [s] | comm % | GFLOP/s |
+|-----|------|-------|------|---------------|---------|---------|---------------|---------------|--------|---------|
+| 512 | 2×4  | 1     | 8    | 2.670         | 2.662   | 2.725   | 1.718         | 0.926         | 35%    | 137.3   |
+| 512 | 2×4  | 2     | 8    | 5.409         | 5.409   | 5.944   | 1.853         | 3.500         | 65%    | 67.8    |
+
+Desglose por nodo (host) en la repetición mediana:
+| b   | grid | nodos | host     | procesos (ranks) | comp prom [s] | comm prom [s] | t_max [s] |
+|-----|------|-------|----------|------------------|---------------|---------------|-----------|
+| 512 | 2×4  | 1     | ventress | 0,1,2,3,4,5,6,7  | 1.718         | 0.926         | 2.670     |
+| 512 | 2×4  | 2     | ventress | 0,1,2,3          | 1.500         | 3.827         | 5.409     |
+| 512 | 2×4  | 2     | yodaxico | 4,5,6,7          | 2.206         | 3.173         | 5.409     |
+
+3. Argumentos para la explicación (latencia, ancho de banda y heterogeneidad de nodos)
+- El tiempo total (t_max) sube de 2.670 s (1 nodo) a 5.409 s (2 nodos), es decir, 2.03x más lento
+  con el mismo grid 2x4 y la misma cantidad total de procesos (8) y CPUs (8).
+- Mientras el tiempo de cómputo promedio casi no cambia (1.72 s vs 1.85 s), el tiempo de
+  comunicación + espera (t_comm) se multiplica por 3.8x (de 0.93 s a 3.50 s, pasando del 35%
+  al 65% del tiempo total).
+- Hay DOS causas físicas que explican este aumento y que se ven claramente en el panel derecho
+  de informe/figuras/parte_e.png:
+  (i) Latencia (alfa) y ancho de banda (1/beta) intra-nodo vs inter-nodo:
+      * En 1 nodo (Config 3), todos los 8 procesos están en ventress y se comunican por memoria
+        compartida (RAM / caché L3, latencia de sub-microsegundos y ancho de banda de decenas de GB/s).
+      * En 2 nodos (Config 4), SLURM asigna la fila 0 del grid (ranks 0..3) a ventress y la fila 1
+        (ranks 4..7) a yodaxico. Por lo tanto, mientras row_comm ocurre dentro del mismo nodo,
+        TODOS los Bcast de columna (col_comm: difusión de A_kk y difusión del panel U de tamaño
+        b x (N - (k+1)b)/pc) cruzan la red física entre ventress y yodaxico, que tiene una latencia
+        alfa órdenes de magnitud mayor y un ancho de banda mucho menor que la memoria compartida.
+  (ii) Nodos heterogéneos y sincronización paso a paso:
+      * Como se documentó en apuntes/cluster.txt, yodaxico (Xeon Silver 4210R, ~18 GFLOP/s/core) es
+        ~30%-40% más lento en BLAS que ventress (Xeon E5-2640 v4, ~25 GFLOP/s/core).
+      * En la tabla por host se ve que ranks 4..7 (en yodaxico) tardan 2.21 s en cómputo frente a
+        1.50 s de ranks 0..3 (en ventress). Como ambos nodos se sincronizan en cada paso k a través
+        de col_comm.Bcast, los procesos rápidos de ventress deben esperar ~0.7 s extra a los de
+        yodaxico (por eso t_comm en ventress es 3.83 s vs 3.17 s en yodaxico). Aun descontando esos
+        ~0.7 s de asimetría de CPU, el sobrecosto puro de red entre nodos es de ~2.0 s adicionales.
+- Pendiente cuando corra Config 5 (4x4, 2 nodos, 16 CPUs): agregar fila a la tabla y comentar si
+  duplicar los cores (de 8 a 16 en 2 nodos) logra compensar el costo de red inter-nodo.
