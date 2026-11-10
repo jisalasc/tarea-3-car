@@ -1,0 +1,71 @@
+APUNTES PARTE (d): CONFIGURACIONES 0 A 3 — SPEEDUP Y EFICIENCIA (20 pts)
+========================================================================
+Pregunta del enunciado: En el cluster, con N = 2^13 y los valores de b obtenidos en (a) y en (c),
+ejecutar las configuraciones 0 a 3. Calcular speedup y eficiencia. Presentar en tabla o gráfico y
+justificar la elección de T(1). ¿Qué configuración es la mejor? ¿Afecta la forma del grid?
+
+1. Cómo se mide y cómo regenerar cuando estén completos config0.csv .. config3.csv
+- Todos los jobs de 1 nodo se fijan a ventress (--nodelist=ventress en slurm/plan_jobs.sh) para que
+  corran en exactamente la misma CPU física (Xeon E5-2640 v4) y sean comparables sin el sesgo del
+  otro nodo más lento (yodaxico).
+- Comandos que debe correr la tercera persona en kraken para generar los CSV faltantes:
+    slurm/plan_jobs.sh 0 512  >  slurm/queue.txt
+    slurm/plan_jobs.sh 1 512  >> slurm/queue.txt
+    slurm/plan_jobs.sh 2 512  >> slurm/queue.txt
+    slurm/plan_jobs.sh 3 512  >> slurm/queue.txt
+    # (y repetir con 1024 si se incluyen ambos b: de (a) b=1024 y de (c) b=512)
+    slurm/submit_next.sh
+- Al terminar los jobs, regenerar tabla y figura automáticamente con:
+    python scripts/plot_parte_d.py
+  que lee results/cluster/config[0-3].csv y genera informe/figuras/parte_d.png.
+
+2. Elección y justificación de T(1)
+- Definición: T(1) es el tiempo de ejecución con 1 proceso MPI (1x1) y T = 1 thread de BLAS en el
+  mismo nodo del cluster (ventress) y con el mismo tamaño de problema N = 8192.
+- Justificación:
+  (i) Mismo hardware y memoria: No se puede usar el tiempo del computador personal de la parte (a)
+      porque es otra arquitectura (Apple M5 ~54 GFLOP/s/core vs Xeon E5-2640 v4 ~25.5 GFLOP/s/core)
+      y otro tamaño de matriz (N=4096 vs N=8192).
+  (ii) Equivalencia entre lu_serial (T=1) y Configuración 0 (1x1, T=1): En 1x1, lu_distributed.py
+      no realiza comunicación efectiva (los Bcast tienen tamaño de grupo 1 y retornan en ~0 s) y
+      ejecuta exactamente los mismos llamados a lu_factor, solve_triangular y matmul que lu_blocked
+      de lu_serial.py (verificado en apuntes/parte_b.txt: diferencia < 0.3%).
+  (iii) Criterio respecto a b: T(1) se toma con el mejor b en 1 core (o con el mismo b de cada curva)
+      de config0.csv (1x1, T=1) / lu_serial.slurm (T=1).
+
+3. Resultados preliminares ya medidos en ventress (8 CPUs totales)
+   (Con T(1) estimado de referencia = 14.373 s a 25.5 GFLOP/s en 1 core de ventress; se reemplaza
+    automáticamente cuando esté config0.csv):
+| b    | grid (pr×pc) | T | CPUs | t_max [s] | comp [s] | comm [s] | GFLOP/s | Speedup | Eficiencia |
+|------|--------------|---|------|-----------|----------|----------|---------|---------|------------|
+| 512  | 2×2          | 2 | 8    | 2.589     | 1.924    | 0.630    | 141.6   | 5.55×   | 69.4%      |
+| 512  | 2×4          | 1 | 8    | 2.670     | 1.718    | 0.926    | 137.3   | 5.38×   | 67.3%      |
+| 1024 | 2×2          | 2 | 8    | 2.905     | 1.820    | 1.020    | 126.2   | 4.95×   | 61.8%      |
+
+4. Respuestas a las preguntas conceptuales de la parte (d)
+- ¿Qué configuración es la mejor (híbrido MPI+threads vs MPI puro vs threads puros)?
+  * Entre las configuraciones de 8 CPUs ya medidas, la Configuración 2 con T = 2 (grid 2x2 procesos
+    MPI x 2 threads OpenBLAS = 8 CPUs, b = 512) supera a la Configuración 3 (grid 2x4 procesos MPI
+    x 1 thread = 8 CPUs): 2.589 s (141.6 GFLOP/s, E = 69.4%) vs 2.670 s (137.3 GFLOP/s, E = 67.3%).
+  * Por qué: Con 2x4 procesos MPI (8 procesos) hay más procesos participando en los Bcast y una
+    granularidad de bloques por proceso menor en la dimensión de columnas (4 bloques por proceso en
+    vez de 8), lo que sube t_comm de 0.630 s (25%) a 0.926 s (35%), comiéndose la ganancia de tener
+    t_comp levemente menor (1.72 s vs 1.92 s). Usar T = 2 threads de BLAS dentro de cada proceso
+    aprovecha paralelismo de memoria compartida en gemm/trsm sin aumentar el número de rangos MPI ni
+    el volumen de mensajes Bcast.
+- ¿Afecta la forma del grid (1x2 vs 2x1, y 2x4 vs 4x2)?
+  * En el algoritmo hay una leve asimetría entre filas (pr) y columnas (pc):
+    1) Cálculo de paneles:
+       - El panel de U (fila r): U_kj = solve_triangular(L_kk, A_kj, lower=True, unit_diagonal=True)
+         opera directamente sobre una tajada contigua por filas en C-order.
+       - El panel de L (columna c): L_ik = solve_triangular(U_kk, A_ik.T, trans="T").T requiere
+         transponer (.T) la vista y copiar el resultado transpuesto, además de tener que empaquetar
+         Lpanel desde una columna de ancho b con stride mayor en memoria (row-major).
+    2) Volumen de comunicación de paneles en el paso k (con m_k = N - (k+1)b):
+       - row_comm.Bcast(Lpanel) transmite m_k * b / pr elementos entre pc procesos.
+       - col_comm.Bcast(Upanel) transmite b * m_k / pc elementos entre pr procesos.
+  * Con b = 512 (N/b = 16 bloques por lado), tanto en pr = 2 como en pr = 4 la cantidad de bloques
+    (16) es divisible exactamente por 2 y por 4, por lo que el balance estático de bloques es simétrico
+    entre 1x2 y 2x1, y entre 2x4 y 4x2; la diferencia práctica entre ambas orientaciones en 1 nodo
+    proviene de la localidad de memoria row-major (C-order) y del costo de solve_triangular / copia de
+    paneles.

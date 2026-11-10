@@ -1,0 +1,120 @@
+APUNTES PARTE (g): MODELO DE COSTO (alfa, beta, gamma) (10 pts)
+===============================================================
+Pregunta del enunciado: Con el modelo de costo visto en clases (alfa, beta, gamma), estimar el
+costo total de la factorización en función de N, b, pr y pc. ¿Qué términos explican el b óptimo
+que encontró? ¿Cuál es el cuello de botella según sus mediciones?
+
+1. Parámetros del modelo
+- alfa (α): latencia por mensaje en una operación colectiva [s].
+- beta (β): tiempo de transferencia por elemento (float64 de 8 bytes, inverso del ancho de banda) [s/palabra].
+- gamma (γ): tiempo por operación de punto flotante (FLOP) en un proceso (con T threads de BLAS) [s/flop].
+- Sea nb = N / b el número de pasos diagonales (k = 0, 1, ..., nb - 1).
+- En el paso k, el tamaño de la submatriz restante (filas I > k y columnas J > k) es:
+    m_k = N - (k + 1)b = (nb - 1 - k)b
+
+2. Costo del paso k en el camino crítico
+En el paso k, las etapas son secuenciales porque cada una depende del resultado de la anterior:
+
+(1) Factorización del bloque diagonal A_kk (b x b) en el proceso dueño (r, c):
+    - Cómputo (lu_factor):
+        T_diag_comp(k) = (2/3) b^3 * γ
+    - Difusión de A_kk en row_comm (pc procesos) y en col_comm (pr procesos):
+      (Nota: en el modelo estándar de Bcast sobre P procesos, el costo es c_P * (α + b^2 * β),
+       donde c_P = 1 en modelo simple o log2(P) en árbol binomial; si pr = 1 o pc = 1 ese Bcast no
+       comunica). Tomando un término α + n*β por cada Bcast activo:
+        T_diag_comm(k) = 2 * (α + b^2 * β)
+
+(2) y (3) Cálculo en paralelo de los paneles U_kj (en la fila r) y L_ik (en la columna c):
+    - En la fila r, los m_k / b bloques de U_kj se reparten entre pc procesos: cada proceso resuelve
+      un sistema triangular con matriz L_kk (b x b) y aprox. m_k / pc columnas (b^2 flops por columna):
+        T_U_comp(k) ≈ b * (m_k / pc) * b * γ = (b^2 * m_k / pc) * γ
+    - En la columna c, los m_k / b bloques de L_ik se reparten entre pr procesos:
+        T_L_comp(k) ≈ (b^2 * m_k / pr) * γ
+    - Como la fila r y la columna c trabajan simultáneamente (salvo el proceso (r, c) que hace ambos):
+        T_panel_comp(k) ≈ b^2 * m_k * (1/pr + 1/pc) * γ
+
+(4) Difusión de los paneles L_ik (por row_comm) y U_kj (por col_comm):
+    - En cada fila del grid, el proceso de la columna c difunde su panel L apilado de tamaño
+      (m_k / pr) * b elementos a los pc procesos de su fila:
+        T_L_comm(k) = α + (b * m_k / pr) * β
+    - En cada columna del grid, el proceso de la fila r difunde su panel U apilado de tamaño
+      b * (m_k / pc) elementos a los pr procesos de su columna:
+        T_U_comm(k) = α + (b * m_k / pc) * β
+    - Ambos Bcast se ejecutan en cada paso:
+        T_panel_comm(k) = 2α + b * m_k * (1/pr + 1/pc) * β
+
+(5) Actualización de la submatriz restante A_ij -= L_ik @ U_kj:
+    - Cada proceso tiene aproximadamente (m_k / pr) filas y (m_k / pc) columnas en la submatriz
+      restante, y multiplica (m_k / pr x b) por (b x m_k / pc):
+        T_upd_comp(k) ≈ 2 * b * (m_k / pr) * (m_k / pc) * γ = (2 * b * m_k^2 / (pr * pc)) * γ
+
+3. Suma sobre todos los pasos k = 0, ..., nb - 1 (con nb = N / b)
+Usando las sumas:
+  - Σ_{k=0}^{nb-1} 1 = N / b
+  - Σ_{k=0}^{nb-1} m_k = b * Σ_{j=0}^{nb-1} j ≈ N^2 / (2b)
+  - Σ_{k=0}^{nb-1} m_k^2 = b^2 * Σ_{j=0}^{nb-1} j^2 ≈ N^3 / (3b)
+
+Obtenemos los tres componentes del costo total T(N, b, pr, pc) = T_comp + T_lat + T_bw:
+
+  * Cómputo total (proporcional a γ):
+      T_comp(N, b, pr, pc) ≈ γ * [ (2/3) * N^3 / (pr * pc)
+                                   + (1/2) * N^2 * b * (1/pr + 1/pc)
+                                   + (2/3) * N * b^2 ]
+    Interpretación de cada término de T_comp:
+      - (2/3) N^3 / (pr * pc): actualización GEMM perfectamente paralelizada entre los pr*pc procesos.
+      - (1/2) N^2 b (1/pr + 1/pc): paneles TRSM (solo participa 1 fila o 1 columna de procesos a la vez).
+      - (2/3) N b^2: bloque diagonal GETRF (lo hace 1 solo proceso en cada paso, secuencial).
+
+  * Latencia total de comunicación (proporcional a α):
+    Con 4 Bcast por paso (2 para A_kk y 2 para los paneles) durante N/b pasos:
+      T_lat(N, b) ≈ 4 * (N / b) * α
+    (Si se incluye el factor log2(pr) + log2(pc) del árbol de Bcast:
+      T_lat ≈ 2 * (N / b) * (log2(pr) + log2(pc)) * α ).
+
+  * Ancho de banda total de comunicación (proporcional a β):
+      T_bw(N, b, pr, pc) ≈ β * [ (1/2) * N^2 * (1/pr + 1/pc) + 2 * N * b ]
+    Interpretación:
+      - (1/2) N^2 (1/pr + 1/pc): volumen total de paneles difundidos (NO depende de b en primer orden).
+      - 2 N b: difusión de los N/b bloques diagonales de tamaño b^2 (crece linealmente con b).
+
+  * Fórmula total resumida:
+      T(N, b, pr, pc) ≈ γ * [ 2 N^3 / (3 pr pc) + (N^2 b / 2)(1/pr + 1/pc) + (2/3) N b^2 ]
+                        + α * [ 4 N / b ]
+                        + β * [ (N^2 / 2)(1/pr + 1/pc) + 2 N b ]
+
+4. ¿Qué términos explican el b óptimo encontrado (b = 512 en el cluster)?
+El tamaño de bloque b aparece con signos opuestos (compromiso / trade-off):
+- Términos que crecen cuando b es CHICO (proporcionales a 1/b):
+  1) Latencia de red: T_lat = 4(N/b)α. Cuando b baja a 64 (N/b = 128 pasos), se hacen 512 Bcast
+     secuenciales (piso de ~0.39 s de comunicación visto en la parte c).
+  2) Eficiencia efectiva de BLAS γ(b): En la práctica γ no es constante, sino que aumenta cuando b
+     es muy chico porque el GEMM de ancho interno b tiene baja intensidad aritmética O(b) flops/byte
+     y queda limitado por ancho de banda de memoria RAM/caché (en la parte c, t_comp sube de 1.82 s
+     en b=1024 a 4.67 s en b=64).
+- Términos que crecen cuando b es GRANDE (proporcionales a b y b^2):
+  1) Trabajo con paralelismo reducido y desbalance de carga:
+     El término de paneles γ (N^2 b / 2)(1/pr + 1/pc) (solo 1 fila/columna activa) y el término
+     diagonal γ (2/3) N b^2 (1 solo proceso activo), sumados al desbalance en los bordes del paso k
+     cuando N/b no es mucho mayor que pr, pc (en b=4096 el último bloque de 4096x4096 lo actualiza
+     un único proceso). En las mediciones, esta espera al proceso activo se refleja como un aumento
+     drástico de t_comm (de 0.63 s en b=512 a 3.32 s en b=4096).
+  2) Tráfico extra del bloque diagonal: 2 N b β.
+- El mínimo en b = 512 (con N = 8192, grid 2x2) equilibra ambos regímenes: nb = 16 pasos es lo
+  bastante grande para que los términos O(N^2 b) y el desbalance bloque-cíclico sean pequeños, y b=512
+  es lo bastante grande para que BLAS opere en su eficiencia pico y 4(N/b)α sea despreciable.
+
+5. ¿Cuál es el cuello de botella según las mediciones?
+Depende de la configuración:
+- En 1 nodo con el b óptimo (b = 512, grid 2x2, T = 2, Config 2):
+  El cuello de botella principal es el CÓMPUTO LOCAL (t_comp = 1.92 s, 75% del tiempo total,
+  correspondiente al término Dominante 2 N^3 γ / (3 pr pc)), seguido en segundo lugar por la
+  comunicación + desbalance de paneles (t_comm = 0.63 s, 25%).
+- En 1 nodo con b grande (b >= 2048, parte f):
+  El cuello de botella pasa a ser el DESBALANCE DE CARGA y la serialización de los pasos diagonales/
+  paneles (términos con b y b^2), que hacen esperar a los demás procesos dentro de Bcast (64%-68% del
+  tiempo en b = 4096 y 8192).
+- En 2 nodos (Config 4, grid 2x4 en ventress + yodaxico, parte e):
+  El cuello de botella pasa a ser la COMUNICACIÓN INTER-NODO y la SINCRONIZACIÓN (t_comm = 3.50 s,
+  65% del tiempo total vs 1.85 s de cómputo), dominada por el término de ancho de banda/latencia
+  entre nodos β (N^2 / 2)(1/pr + 1/pc) + 4(N/b)α en col_comm y amplificada por la asimetría de
+  velocidad entre los dos nodos.
