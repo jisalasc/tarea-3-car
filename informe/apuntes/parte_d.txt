@@ -1,0 +1,101 @@
+APUNTES PARTE (d): CONFIGURACIONES 0 A 3 — SPEEDUP Y EFICIENCIA (20 pts)
+========================================================================
+Pregunta del enunciado: En el cluster, con N = 2^13 y los valores de b obtenidos en (a) y en (c),
+ejecutar las configuraciones 0 a 3. Calcular speedup y eficiencia. Presentar en tabla o gráfico y
+justificar la elección de T(1). ¿Qué configuración es la mejor? ¿Afecta la forma del grid?
+
+1. Cómo se midió y generó
+- Datos definitivos: results/cluster/config0.csv, config1.csv, config2.csv, config3.csv y
+  results/parte_a_kraken_T{1,2,4,8}.csv (jobs 39644 a 39681, nodo ventress, 8 cores físicos con
+  --threads-per-core=1, 3 repeticiones por configuración, para b = 512 y b = 1024).
+- Script:
+    python scripts/plot_parte_d.py  ->  informe/figuras/parte_d.png
+
+2. Elección y justificación de T(1)
+- Definición: T(1) es el tiempo de ejecución con 1 proceso MPI (1x1) y T = 1 thread de BLAS en el
+  mismo nodo del cluster (ventress) y con el mismo tamaño de matriz N = 8192:
+    * Para b = 512:  T(1) = 11.208 s (32.7 GFLOP/s; en lu_serial T=1 dio 11.062 s, diferencia 1.3%).
+    * Para b = 1024: T(1) = 10.831 s (33.8 GFLOP/s; en lu_serial T=1 dio 10.507 s, diferencia 3.0%).
+- Justificación:
+  (i) Mismo hardware y tamaño de problema: No se puede usar el tiempo del computador personal de la
+      parte (a) porque corresponde a N = 4096 y otra arquitectura (Apple M5 vs Xeon E5-2640 v4).
+  (ii) Equivalencia algorítmica: En 1x1 con T = 1, lu_distributed.py no realiza comunicación real
+      (t_comm = 0.0004 s) y ejecuta las mismas operaciones BLAS/LAPACK que lu_serial.py.
+  (iii) Fórmulas:
+        Speedup    S(pr, pc, T) = T(1) / t_max(pr, pc, T)
+        Eficiencia E(pr, pc, T) = S(pr, pc, T) / (pr * pc * T)
+
+3. Tabla completa de resultados (N = 8192, 1 nodo ventress, mediana de 3 repeticiones)
+| b    | config | grid (pr×pc) | T | CPUs | t_max [s] | comp [s] | comm [s] | GFLOP/s | Speedup | Eficiencia |
+|------|--------|--------------|---|------|-----------|----------|----------|---------|---------|------------|
+| 512  | 0      | 1×1          | 1 | 1    | 11.208    | 11.105   | 0.000    | 32.7    | 1.00×   | 100.0%     |
+| 512  | 0      | 1×1          | 2 | 2    | 6.677     | 6.571    | 0.000    | 54.9    | 1.68×   | 83.9%      |
+| 512  | 0      | 1×1          | 4 | 4    | 4.226     | 4.120    | 0.000    | 86.7    | 2.65×   | 66.3%      |
+| 512  | 0      | 1×1          | 8 | 8    | 3.058     | 2.949    | 0.000    | 119.8   | 3.66×   | 45.8%      |
+| 512  | 1      | 1×2          | 1 | 2    | 6.578     | 5.717    | 0.803    | 55.7    | 1.70×   | 85.2%      |
+| 512  | 1      | 1×2          | 2 | 4    | 3.942     | 3.375    | 0.515    | 93.0    | 2.84×   | 71.1%      |
+| 512  | 1      | 1×2          | 4 | 8    | 2.620     | 2.193    | 0.374    | 139.9   | 4.28×   | 53.5%      |
+| 512  | 1      | 2×1          | 1 | 2    | 6.832     | 5.809    | 0.974    | 53.6    | 1.64×   | 82.0%      |
+| 512  | 1      | 2×1          | 2 | 4    | 4.308     | 3.518    | 0.739    | 85.1    | 2.60×   | 65.0%      |
+| 512  | 1      | 2×1          | 4 | 8    | 2.983     | 2.334    | 0.597    | 122.9   | 3.76×   | 47.0%      |
+| 512  | 2      | 2×2          | 1 | 4    | 4.015     | 3.091    | 0.888    | 91.3    | 2.79×   | 69.8%      |
+| 512  | 2      | 2×2          | 2 | 8    | 2.597     | 1.932    | 0.630    | 141.1   | 4.32×   | 53.9%      |  <- MEJOR
+| 512  | 3      | 2×4          | 1 | 8    | 2.670     | 1.726    | 0.917    | 137.3   | 4.20×   | 52.5%      |
+| 512  | 3      | 4×2          | 1 | 8    | 2.754     | 1.726    | 1.002    | 133.1   | 4.07×   | 50.9%      |
+| 1024 | 0      | 1×1          | 1 | 1    | 10.831    | 10.668   | 0.000    | 33.8    | 1.00×   | 100.0%     |
+| 1024 | 0      | 1×1          | 2 | 2    | 6.511     | 6.342    | 0.000    | 56.3    | 1.66×   | 83.2%      |
+| 1024 | 0      | 1×1          | 4 | 4    | 4.088     | 3.918    | 0.000    | 89.6    | 2.65×   | 66.2%      |
+| 1024 | 0      | 1×1          | 8 | 8    | 2.971     | 2.795    | 0.000    | 123.3   | 3.65×   | 45.6%      |
+| 1024 | 1      | 1×2          | 1 | 2    | 6.928     | 5.587    | 1.270    | 52.9    | 1.56×   | 78.2%      |
+| 1024 | 1      | 1×2          | 2 | 4    | 4.160     | 3.280    | 0.803    | 88.1    | 2.60×   | 65.1%      |
+| 1024 | 1      | 1×2          | 4 | 8    | 2.754     | 2.110    | 0.568    | 133.1   | 3.93×   | 49.2%      |
+| 1024 | 1      | 2×1          | 1 | 2    | 7.199     | 5.653    | 1.483    | 50.9    | 1.50×   | 75.2%      |
+| 1024 | 1      | 2×1          | 2 | 4    | 4.422     | 3.310    | 1.048    | 82.9    | 2.45×   | 61.2%      |
+| 1024 | 1      | 2×1          | 4 | 8    | 3.079     | 2.169    | 0.845    | 119.0   | 3.52×   | 44.0%      |
+| 1024 | 2      | 2×2          | 1 | 4    | 4.555     | 2.977    | 1.503    | 80.5    | 2.38×   | 59.5%      |
+| 1024 | 2      | 2×2          | 2 | 8    | 2.912     | 1.825    | 1.022    | 125.9   | 3.72×   | 46.5%      |
+| 1024 | 3      | 2×4          | 1 | 8    | 3.167     | 1.606    | 1.480    | 115.7   | 3.42×   | 42.8%      |
+| 1024 | 3      | 4×2          | 1 | 8    | 3.468     | 1.653    | 1.729    | 105.7   | 3.12×   | 39.0%      |
+
+4. Respuestas a las preguntas de la parte (d)
+- ¿Qué configuración es la mejor?
+  * En valor absoluto y en speedup, la mejor configuración es la **Configuración 2 con b = 512,
+    grid 2×2 y T = 2 threads por proceso** (8 CPUs totales): alcanza t_max = 2.597 s (141.1 GFLOP/s,
+    Speedup = 4.32x, Eficiencia = 53.9%), seguida muy de cerca por la Configuración 1 con grid 1×2 y
+    T = 4 (2.620 s, 139.9 GFLOP/s, Speedup = 4.28x).
+  * Comparación entre los tres paradigmas en 8 CPUs (con b = 512):
+    - Threads puros (Config 0, 1×1, T=8): 3.058 s (S = 3.66x). No tiene sobrecosto MPI (comm = 0),
+      pero el escalamiento multithread de OpenBLAS dentro de un solo proceso se satura con 8 hilos
+      (sobre todo en lu_factor del bloque diagonal y por contención de caché/sincronización OpenMP).
+    - MPI puro (Config 3, 2×4, T=1): 2.670 s (S = 4.20x). Logra el menor tiempo de cómputo puro
+      (comp = 1.726 s), pero al tener 8 rangos MPI el costo de comunicación + espera sube a 0.917 s.
+    - Híbrido MPI + threads (Config 2, 2×2, T=2 y Config 1, 1×2, T=4): 2.597 s y 2.620 s (S = 4.32x
+      y 4.28x). Combina lo mejor de ambos mundos: pocos procesos MPI (menor sobrecosto de Bcast y
+      mejor balance de bloques) y T = 2 o 4 threads de BLAS por proceso donde OpenBLAS todavía escala
+      con alta eficiencia (~84% en T=2).
+  * Comparación b = 512 vs b = 1024:
+    - En 1×1 (sin MPI), b = 1024 es levemente más rápido que b = 512 (10.83 s vs 11.21 s en T=1;
+      2.97 s vs 3.06 s en T=8), consistente con la parte (a) donde el serial prefiere bloques de 1024.
+    - En cambio, apenas hay múltiples procesos MPI (Configs 1, 2 y 3), **b = 512 supera siempre a
+      b = 1024** (p.ej. en 2×4: 2.670 s vs 3.167 s) porque con b = 1024 solo hay 8×8 bloques totales
+      y el desbalance dispara t_comm (de 0.92 s a 1.48 s).
+
+- ¿Afecta la forma del grid (1×2 vs 2×1, y 2×4 vs 4×2)?
+  * **Sí, afecta de manera sistemática:** En TODAS las mediciones (tanto para T = 1, 2, 4 como para
+    b = 512 y b = 1024), **el grid con más columnas que filas (pr < pc: 1×2 y 2×4) es más rápido
+    que su transpuesto (pr > pc: 2×1 y 4×2)**:
+    - Con b = 512: 1×2 supera a 2×1 en T=1 (6.58 vs 6.83 s), T=2 (3.94 vs 4.31 s) y T=4 (2.62 vs 2.98 s);
+      y 2×4 supera a 4×2 (2.670 s vs 2.754 s).
+    - Con b = 1024: la brecha es aún mayor: 2×4 tarda 3.167 s vs 3.468 s en 4×2 (~10% más rápido).
+  * **Por qué ocurre esta asimetría (dos razones):**
+    1) **Localidad de memoria (row-major en NumPy) y transposición en el panel L:**
+       En `lu_distributed.py`, el cálculo del panel de U (repartido entre las `pc` columnas) opera
+       sobre una tajada horizontal contigua `Aloc[lk*b:(lk+1)*b, j_start*b:]` llamando directamente a
+       `solve_triangular(Akk, blk, lower=True, unit_diagonal=True)`. En cambio, el cálculo del panel
+       de L (repartido entre las `pr` filas) opera sobre una tajada vertical no contigua en memoria
+       (`Aloc[i_start*b:, lc*b:(lc+1)*b]`) y requiere transponer de ida y de vuelta:
+       `solve_triangular(Akk, blk.T, lower=False, trans="T").T`.
+    2) **Orden secuencial de los Bcast del bloque diagonal en el paso 1:**
+       En el paso 1, el dueño `(r, c)` ejecuta primero `row_comm.Bcast(Akk)` y recién después
+       `col_comm.Bcast(Akk)`. Cuando `pc > pr` (ej. 1×2 o 2×4), más procesos pertenecen a la fila `r`
+       y reciben `Akk` en el primer `Bcast`, comenzando antes a calcular sus paneles $U_{kj}$.

@@ -32,15 +32,19 @@ Tabla/gráfico. ¿Sigue siendo el mejor el b de (a)? Por qué sí/no.
 - Resultado: **b = 512** (2.59 s, 141.6 GFLOP/s); b=256 +6 %, b=1024 +12 %. Óptimo más chico que en (a) por el desbalance con b grande.
 
 ## (d) Configuraciones 0 a 3: speedup y eficiencia — 20 pts
+<!-- apuntes: informe/apuntes/parte_d.txt | script: scripts/plot_parte_d.py -> informe/figuras/parte_d.png -->
 Elección y justificación de T(1). Tabla/gráfico speedup y eficiencia vs CPUs totales. Mejor configuración. Efecto de la forma del grid (1×2 vs 2×1, 2×4 vs 4×2).
 
 ## (e) Configuraciones 4 y 5: dos nodos — 15 pts
+<!-- apuntes: informe/apuntes/parte_e.txt | script: scripts/plot_parte_e.py -> informe/figuras/parte_e.png -->
 Config 4 (2×4, 2 nodos) vs config 3 (2×4, 1 nodo): cómputo vs comunicación. Latencia y ancho de banda intra vs inter nodo. Config 5 (4×4).
 
 ## (f) Grid 2×2: b = N/2 vs b = N/16 — 15 pts
+<!-- apuntes: informe/apuntes/parte_f.txt | script: scripts/plot_parte_f.py -> informe/figuras/parte_f.png -->
 Cómputo y comunicación de cada proceso (4 procesos × 2 valores de b). Explicación (desbalance con b grande, más mensajes con b chico).
 
 ## (g) Modelo de costo (α, β, γ) — 10 pts
+<!-- apuntes: informe/apuntes/parte_g.txt -->
 Costo total en función de N, b, pr, pc. Términos que explican el b óptimo. Cuello de botella según las mediciones.
 
 ## Declaración de uso de IA

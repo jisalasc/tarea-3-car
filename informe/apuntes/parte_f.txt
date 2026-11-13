@@ -1,0 +1,50 @@
+APUNTES PARTE (f): GRID 2x2, b = N/2 vs b = N/16 POR PROCESO (15 pts)
+=====================================================================
+Pregunta del enunciado: en el grid 2x2, comparar b = N/2 (4096) y b = N/16 (512),
+separando el tiempo de cómputo y de comunicación de cada proceso. Explicar.
+
+1. Cómo se midió y generó
+- Datos: results/cluster/parte_c.csv (N = 8192, grid 2x2, T = 2, nodo ventress, 3 reps).
+  (Nota: si se corre un job adicional con T = 1 en results/cluster/parte_f.csv, se pasa
+   con: python scripts/plot_parte_f.py --csv results/cluster/parte_f.csv).
+- Script: python scripts/plot_parte_f.py -> informe/figuras/parte_f.png
+- Se toma la repetición mediana (según t_max) para cada b, de modo que t_comp + t_comm
+  de los 4 procesos correspondan a la misma ejecución.
+
+2. Resultados por proceso (N = 8192, grid 2x2, T = 2, ventress)
+| b    | N/b | rank | proc (r,c) | t_comp [s] | t_comm [s] | t_wall [s] | t_max [s] | comm % |
+|------|-----|------|------------|------------|------------|------------|-----------|--------|
+| 4096 | 2   | 0    | (0,0)      | 1.313      | 0.114      | 1.427      | 6.520     | 8%     |
+| 4096 | 2   | 1    | (0,1)      | 1.623      | 4.843      | 6.519      | 6.520     | 75%    |
+| 4096 | 2   | 2    | (1,0)      | 1.273      | 5.138      | 6.467      | 6.520     | 80%    |
+| 4096 | 2   | 3    | (1,1)      | 3.316      | 3.202      | 6.520      | 6.520     | 49%    |
+| 512  | 16  | 0    | (0,0)      | 1.774      | 0.767      | 2.569      | 2.589     | 30%    |
+| 512  | 16  | 1    | (0,1)      | 1.927      | 0.629      | 2.589      | 2.589     | 25%    |
+| 512  | 16  | 2    | (1,0)      | 1.880      | 0.675      | 2.587      | 2.589     | 26%    |
+| 512  | 16  | 3    | (1,1)      | 2.114      | 0.449      | 2.589      | 2.589     | 18%    |
+
+3. Explicación de los resultados (argumentos para el informe)
+- Caso b = N/2 = 4096 (solo 2x2 = 4 bloques en total, 1 bloque por proceso):
+  * Paso k = 0:
+    - r0 (0,0) es dueño de A_00: factoriza A_00 (~1.31 s) mientras r1, r2, r3 esperan
+      en el Bcast de A_00 (esa espera se acumula en su t_comm).
+    - Luego r1 (0,1) calcula U_01 y r2 (1,0) calcula L_10 (solve_triangular), los difunden,
+      y r3 (1,1) actualiza su único bloque A_11 -= L_10 @ U_01.
+    - r0 (0,0) ya NO tiene bloques con I > 0 ni J > 0: en k = 1 no participa en los Bcast
+      del bloque diagonal (porque están restringidos a in_row_r e in_col_c) y en los Bcast
+      de paneles tiene tamaño 0 (retorno inmediato). Por eso r0 termina su ejecución en
+      t_wall = 1.43 s con t_comm = 0.11 s.
+  * Paso k = 1:
+    - r3 (1,1) es dueño de A_11: primero tuvo que hacer el matmul de k = 0 y ahora factoriza
+      A_11 (por eso su t_comp = 3.32 s es el mayor de todos).
+    - Mientras r3 calcula A_11, r1 (0,1) y r2 (1,0) están bloqueados esperando en el Bcast
+      de A_11 (de columna y de fila respectivamente). Por eso r1 y r2 registran t_comm ~ 5 s
+      (75%-80% de su tiempo), que en realidad es ESPERA por desbalance de carga.
+- Caso b = N/16 = 512 (16x16 = 256 bloques en total, 8x8 = 64 bloques por proceso):
+  * Al haber 16 pasos y reparto bloque-cíclico, en casi todos los pasos los 4 procesos
+    tienen bloques de la submatriz restante para actualizar.
+  * El cómputo queda mucho mejor balanceado: entre 1.77 s en r0 (0,0) y 2.11 s en r3 (1,1).
+    (r3 sigue teniendo levemente más cómputo y menos espera porque los bloques con índices
+    impares permanecen activos un paso más que los pares).
+  * Como consecuencia del mejor balance y mayor paralelismo efectivo, t_max baja de 6.52 s
+    a 2.59 s (2.5x más rápido).

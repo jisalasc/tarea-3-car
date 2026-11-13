@@ -1,0 +1,78 @@
+APUNTES PARTE (e): CONFIGURACIONES EN DOS NODOS (15 pts)
+========================================================
+Pregunta del enunciado: Con N = 2^13 y los valores de b obtenidos en (a) y en (c), ejecutar
+las configuraciones 4 (2x4, 2 nodos) y 5 (4x4, 2 nodos). Comparar la configuración 4 con el
+mismo grid en 1 nodo (configuración 3), separando cómputo y comunicación, y relacionar con la
+latencia y el ancho de banda dentro de un nodo y entre nodos.
+
+1. Cómo se midió y generó
+- Datos definitivos: results/cluster/config3.csv, config4.csv y config5.csv (jobs 39660–39663 para
+  b = 512, y jobs 39680–39683 para b = 1024; 3 repeticiones por configuración).
+- Script:
+    python scripts/plot_parte_e.py  ->  informe/figuras/parte_e.png
+
+2. Resultados definitivos: Config 3 (1 nodo) vs Config 4 (2 nodos) y Config 5 (2 nodos)
+| b    | config | grid | nodos | CPUs | t_max med [s] | min [s] | max [s] | comp prom [s] | comm prom [s] | comm % | GFLOP/s |
+|------|--------|------|-------|------|---------------|---------|---------|---------------|---------------|--------|---------|
+| 512  | 3      | 2×4  | 1     | 8    | 2.670         | 2.668   | 2.736   | 1.726         | 0.917         | 35%    | 137.3   |
+| 512  | 4      | 2×4  | 2     | 8    | 5.668         | 5.631   | 5.726   | 1.858         | 3.754         | 67%    | 64.7    |
+| 512  | 5      | 4×4  | 2     | 16   | 4.521         | 4.504   | 4.531   | 0.998         | 3.426         | 77%    | 81.1    |
+| 1024 | 3      | 2×4  | 1     | 8    | 3.167         | 3.142   | 3.235   | 1.606         | 1.480         | 48%    | 115.7   |
+| 1024 | 4      | 2×4  | 2     | 8    | 6.241         | 6.216   | 6.278   | 1.787         | 4.253         | 70%    | 58.7    |
+| 1024 | 5      | 4×4  | 2     | 16   | 5.526         | 5.507   | 5.526   | 0.956         | 4.137         | 81%    | 66.3    |
+
+Desglose por nodo (host) en la repetición mediana:
+| b    | grid | nodos | host     | procesos (ranks)        | comp prom [s] | comm prom [s] | t_max [s] |
+|------|------|-------|----------|-------------------------|---------------|---------------|-----------|
+| 512  | 2×4  | 1     | ventress | 0,1,2,3,4,5,6,7         | 1.726         | 0.917         | 2.670     |
+| 512  | 2×4  | 2     | ventress | 0,1,2,3                 | 1.516         | 4.069         | 5.668     |
+| 512  | 2×4  | 2     | yodaxico | 4,5,6,7                 | 2.200         | 3.438         | 5.668     |
+| 512  | 4×4  | 2     | ventress | 0,1,2,3,4,5,6,7         | 0.786         | 3.597         | 4.521     |
+| 512  | 4×4  | 2     | yodaxico | 8,9,10,11,12,13,14,15   | 1.210         | 3.256         | 4.521     |
+| 1024 | 2×4  | 1     | ventress | 0,1,2,3,4,5,6,7         | 1.606         | 1.480         | 3.167     |
+| 1024 | 2×4  | 2     | ventress | 0,1,2,3                 | 1.366         | 4.546         | 6.241     |
+| 1024 | 2×4  | 2     | yodaxico | 4,5,6,7                 | 2.207         | 3.960         | 6.241     |
+| 1024 | 4×4  | 2     | ventress | 0,1,2,3,4,5,6,7         | 0.664         | 4.225         | 5.526     |
+| 1024 | 4×4  | 2     | yodaxico | 8,9,10,11,12,13,14,15   | 1.247         | 4.050         | 5.526     |
+
+3. Argumentos para la explicación (latencia, ancho de banda y heterogeneidad de nodos)
+- Comparación Config 3 (1 nodo, 2×4) vs Config 4 (2 nodos, 2×4) con 8 CPUs totales:
+  * Con b = 512, el tiempo total t_max sube de 2.670 s (1 nodo) a 5.668 s (2 nodos), es decir,
+    2.12x más lento usando exactamente el mismo grid (2×4) y la misma cantidad de cores (8).
+    (Con b = 1024 ocurre lo mismo: sube de 3.167 s a 6.241 s, 1.97x más lento).
+  * El tiempo de cómputo promedio casi no varía (1.726 s en 1 nodo vs 1.858 s en 2 nodos), mientras
+    que el tiempo de comunicación + espera (t_comm) se multiplica por 4.1x: sube de 0.917 s (35%) a
+    3.754 s (67%).
+  * Hay DOS causas físicas que explican este comportamiento (visibles en el panel derecho de
+    informe/figuras/parte_e.png):
+    (i) Latencia (α) y ancho de banda (1/β) intra-nodo vs inter-nodo:
+        - En 1 nodo (Config 3), los 8 procesos residen en ventress y se comunican por memoria
+          compartida (RAM / caché L3, con latencia de sub-microsegundos y ancho de banda de decenas
+          de GB/s).
+        - En 2 nodos (Config 4), SLURM coloca la fila 0 del grid (ranks 0..3) en ventress y la
+          fila 1 (ranks 4..7) en yodaxico. Así, mientras row_comm ocurre dentro de cada nodo, TODAS
+          las colectivas por columna (col_comm.Bcast de A_kk y del panel U_kj) deben cruzar la red
+          física entre nodos, donde la latencia α es órdenes de magnitud mayor y el ancho de banda
+          1/β es mucho menor que en memoria compartida.
+    (ii) Heterogeneidad de los dos nodos y sincronización por paso:
+        - El nodo yodaxico (~17.7 GFLOP/s/core) es ~30%-40% más lento en BLAS que ventress
+          (~25.5 GFLOP/s/core).
+        - En la tabla por host (con b = 512, Config 4) se ve que ranks 4..7 en yodaxico tardan
+          2.200 s en cómputo frente a 1.516 s de ranks 0..3 en ventress (+0.68 s más lento). Como
+          ambas filas se sincronizan en cada paso k mediante col_comm.Bcast, los procesos rápidos
+          de ventress deben esperar esos ~0.68 s adicionales (por eso t_comm en ventress es 4.069 s
+          vs 3.438 s en yodaxico). Descontando esa espera por CPU asimétrica, el sobrecosto puro de
+          transferencia y latencia por red inter-nodo es de ~2.3 s.
+
+- Análisis de la Configuración 5 (4×4 en 2 nodos, 16 CPUs = 8 por nodo):
+  * Al duplicar los procesos de 8 (Config 4, 2×4) a 16 (Config 5, 4×4) en los 2 nodos, el tiempo de
+    cómputo promedio cae casi exactamente a la mitad: de 1.858 s a 0.998 s en b = 512 (0.786 s en
+    ventress y 1.210 s en yodaxico), y de 1.787 s a 0.956 s en b = 1024.
+  * Gracias a esa reducción en cómputo (y menor volumen por proceso en los paneles al dividir por
+    pr = 4 y pc = 4), el tiempo total t_max en 2 nodos baja de 5.668 s a **4.521 s** con b = 512
+    (y de 6.241 s a 5.526 s con b = 1024).
+  * Sin embargo, como la comunicación inter-nodo sigue dominando (t_comm = 3.426 s, el 77% del
+    tiempo total en Config 5), usar 16 CPUs en 2 nodos (4.521 s) sigue siendo más lento que usar
+    8 CPUs dentro de 1 solo nodo en Config 3 (2.670 s) o Config 2 (2.597 s). Para que 2 nodos
+    superen a 1 nodo se requeriría un tamaño de matriz N bastante mayor (donde el término de cómputo
+    O(N^3 / p) domine ampliamente sobre el término de red O(N^2 / sqrt(p) * β_red)).
