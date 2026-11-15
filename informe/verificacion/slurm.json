@@ -1,0 +1,7 @@
+{
+  "status": "PASS",
+  "planned_commands": 40,
+  "mpi_commands": 32,
+  "serial_commands": 8,
+  "scope": "Planificador y directivas; sin enviar jobs al cluster"
+}

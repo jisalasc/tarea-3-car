@@ -1,0 +1,6 @@
+OK  test_figura1_proceso_01
+OK  test_todos_los_bloques_tienen_un_unico_dueno
+OK  test_figura2_paso_k2
+OK  test_i_start_es_igual_en_toda_la_fila_del_grid
+OK  test_indices_globales
+Todos los tests de layout pasaron.

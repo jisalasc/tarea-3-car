@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "test": "El lanzador simulado imprime PASS y termina con código 9; la suite debe fallar",
+  "observed_returncode": 1,
+  "rejected_cases": 14
+}

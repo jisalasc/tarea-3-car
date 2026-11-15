@@ -14,7 +14,7 @@ tests/test_layout.py    python tests/test_layout.py
 scripts/                parte_a.py, plot_parte_a.py, test_distributed.sh, run_local_mpi.sh, make_zip.sh
 slurm/                  templates sbatch + planificador de cola (ver slurm/README.md)
 results/                CSV de mediciones (se versionan)           ver results/README.md
-informe/informe.md      esqueleto del informe
+informe/informe.md      informe completo: metodología, partes (a)–(g), IA y anexos
 ```
 
 ## Setup
@@ -59,3 +59,22 @@ python src/lu_distributed.py --help
 ## Flujo git
 Ramas por feature, PR/merge a `main` cuando esté probado, `git pull --rebase` antes de `push`.
 `results/` se versiona; `slurm/logs/` no. Nunca subir claves privadas.
+
+## Informe y entrega
+
+El informe completo está en [`informe/informe.md`](informe/informe.md), con versión
+[PDF](informe/informe.pdf) y [LaTeX](informe/informe.tex). Para recompilar y preparar
+Overleaf, ver [`informe/OVERLEAF.md`](informe/OVERLEAF.md):
+
+```bash
+bash scripts/build_informe.sh
+bash scripts/make_zip.sh
+```
+
+La compilación requiere Pandoc y Tectonic o XeLaTeX; no requiere ejecutar MPI ni
+repetir los experimentos del cluster.
+
+La revisión de cobertura y coherencia de los datos se reproduce con
+`python scripts/audit_results.py`. La auditoría por inciso y las pruebas locales
+están documentadas en [`informe/REVISION_PAUTA.md`](informe/REVISION_PAUTA.md) y
+`informe/verificacion/`. La suite MPI incluye 14 casos de correctitud.

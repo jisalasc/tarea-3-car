@@ -64,7 +64,7 @@ def main():
         elif args.t1 is not None:
             t1_map[b] = args.t1
         else:
-            t1_map[b] = (2 * N**3 / 3) / (25.5e9)
+            raise ValueError(f"Falta la referencia 1×1 T=1 para b={b}; entregue el CSV correspondiente o --t1 con un tiempo medido.")
 
     sum_df["t1"] = sum_df["b"].map(t1_map)
     sum_df["speedup"] = sum_df["t1"] / sum_df["t_max"]

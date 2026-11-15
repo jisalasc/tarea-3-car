@@ -19,6 +19,7 @@ def main():
     df = pd.read_csv(args.csv)
 
     N = int(df["N"].iloc[0])
+    T = int(df["threads"].iloc[0])
     b_targets = [N // 2, N // 16]
     seleccion = []
 
@@ -64,7 +65,7 @@ def main():
 
     axes[0].set_ylabel("tiempo por proceso [s]")
     axes[0].set_ylim(0, med_df["t_max"].max() * 1.18)
-    fig.suptitle(f"LU distribuida en grid 2×2 (N = {N}): b = N/2 vs b = N/16", fontsize=16, y=1.02)
+    fig.suptitle(f"LU distribuida en grid 2×2 (N = {N}, T = {T}): b = N/2 vs b = N/16", fontsize=16, y=1.02)
     fig.tight_layout()
     fig.savefig(args.out, dpi=160, bbox_inches="tight")
     print(f"\nfigura: {args.out}")

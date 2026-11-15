@@ -62,7 +62,7 @@ def main():
     g2 = g.sort_index()  # mismo orden (b creciente) que el panel izquierdo
     idx = range(len(g2))
     ax2.bar([i - w / 2 for i in idx], g2["comp"], w, color="#2E5A88", label="cómputo (BLAS/LAPACK)")
-    ax2.bar([i + w / 2 for i in idx], g2["comm"], w, color="#E08E2B", label="comunicación (Bcast)")
+    ax2.bar([i + w / 2 for i in idx], g2["comm"], w, color="#E08E2B", label="comunicación + espera (Bcast)")
     ax2.set_xticks(list(idx)); ax2.set_xticklabels([str(b) for b in g2.index])
     ax2.set_xlabel("tamaño de bloque b"); ax2.set_ylabel("tiempo promedio por proceso [s]")
     ax2.set_title("desglose en la repetición mediana")

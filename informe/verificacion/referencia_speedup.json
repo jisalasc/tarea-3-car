@@ -1,0 +1,5 @@
+{
+  "status": "PASS",
+  "test": "Se suministran solo datos de config 2 sin T(1); el gráfico debe rechazarlo en lugar de inventar una referencia",
+  "observed_returncode": 1
+}

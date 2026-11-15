@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "distributed_measurement_groups": 40,
+  "distributed_rows": 480,
+  "serial_rows": 21,
+  "numeric_report_tables": 8,
+  "scope": "CSV, cobertura y tablas; no valida procedencia física ni ejecuta MPI"
+}

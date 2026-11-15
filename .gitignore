@@ -25,3 +25,10 @@ id_*
 !*.pub
 *.pem
 *.key
+
+# Auxiliares de compilación del informe
+informe/*.aux
+informe/*.log
+informe/*.out
+informe/*.toc
+informe/*.synctex.gz

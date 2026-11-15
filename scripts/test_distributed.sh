@@ -9,12 +9,22 @@ CASES=(
   "1 1 512 64"  "2 2 512 64"  "2 2 512 512" "2 2 512 256"
   "1 4 512 64"  "4 1 512 64"  "2 3 384 32"  "2 3 640 64"  "3 2 640 64"
   "2 4 1024 128" "4 2 1024 64" "2 2 1000 100"
+  "2 3 64 64" "1 8 64 32"  # procesos sin bloques locales y paneles vacíos
 )
 fail=0
 for c in "${CASES[@]}"; do
-  set -- $c
-  out=$(mpirun -n $(($1*$2)) python src/lu_distributed.py --N $3 --b $4 --pr $1 --pc $2 --threads 1 --verify 2>&1 | grep -E "\[verify\]" || true)
-  printf "grid %sx%s N=%-5s b=%-4s  %s\n" "$1" "$2" "$3" "$4" "${out:-SIN SALIDA (error)}"
-  [[ "$out" == *PASS* ]] || fail=1
+  read -r pr pc N b <<< "$c"
+  if out=$(mpirun -n "$((pr*pc))" python src/lu_distributed.py --N "$N" --b "$b" --pr "$pr" --pc "$pc" --threads 1 --verify 2>&1); then
+    verification=$(printf '%s\n' "$out" | grep -E '\[verify\]' || true)
+    if [[ "$verification" == *"-> PASS"* ]]; then
+      printf 'grid %sx%s N=%-5s b=%-4s  %s\n' "$pr" "$pc" "$N" "$b" "$verification"
+    else
+      printf 'FALLO: grid %sx%s N=%s b=%s sin verificación PASS\n%s\n' "$pr" "$pc" "$N" "$b" "$out"
+      fail=1
+    fi
+  else
+    printf 'FALLO MPI: grid %sx%s N=%s b=%s\n%s\n' "$pr" "$pc" "$N" "$b" "$out"
+    fail=1
+  fi
 done
 [ $fail -eq 0 ] && echo "TODOS PASAN" || { echo "HAY FALLAS"; exit 1; }
